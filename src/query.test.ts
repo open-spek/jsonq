@@ -585,3 +585,109 @@ describe("explain() with sort ops (task 3.5)", () => {
     expect(Object.isFrozen(plan[0])).toBe(true);
   });
 });
+
+// Tie-breaker fixture (task 3.6): score and name both carry duplicates so
+// two- and three-key chains have genuine ties at every level, and ids 2/3
+// tie on BOTH score and name (full-tie stability is observable).
+interface Player {
+  id: number;
+  team: string;
+  score: number;
+  name: string;
+}
+
+function makePlayers(): Player[] {
+  return [
+    { id: 1, team: "red", score: 10, name: "zoe" },
+    { id: 2, team: "blue", score: 10, name: "amy" },
+    { id: 3, team: "red", score: 10, name: "amy" },
+    { id: 4, team: "blue", score: 20, name: "bob" },
+    { id: 5, team: "red", score: 20, name: "amy" },
+  ];
+}
+
+function playerIds(q: { execute(): Player[] }): number[] {
+  return q.execute().map((player) => player.id);
+}
+
+describe("chained .sort() tie-breakers: FIRST call is primary (task 3.6)", () => {
+  test("two chained sorts: first call orders, second breaks ties", () => {
+    // plays asc groups 9:{alpha, charlie} 20:{echo} 100:{delta, bravo};
+    // title breaks the ties inside each group (SQL ORDER BY plays, title)
+    expect(sortedIds(query(makeTracks()).sort("plays").sort("title"))).toEqual([2, 5, 3, 4, 1]);
+  });
+
+  test("each chained key keeps its own direction", () => {
+    expect(sortedIds(query(makeTracks()).sort("plays", "desc").sort("title"))).toEqual([
+      4, 1, 3, 2, 5,
+    ]);
+    expect(sortedIds(query(makeTracks()).sort("plays").sort("title", "desc"))).toEqual([
+      5, 2, 3, 1, 4,
+    ]);
+  });
+
+  test("three chained sorts compose left to right", () => {
+    // team asc, then score desc inside each team, then name asc on the
+    // remaining {id 1, id 3} tie (both red, score 10)
+    expect(
+      playerIds(query(makePlayers()).sort("team").sort("score", "desc").sort("name")),
+    ).toEqual([4, 2, 5, 3, 1]);
+  });
+
+  test("rows equal on EVERY chained key keep pipeline order (stability)", () => {
+    // ids 2 and 3 tie on both score and name; id 2 comes first in the source
+    expect(playerIds(query(makePlayers()).sort("score").sort("name"))).toEqual([2, 3, 1, 5, 4]);
+  });
+
+  test("nulls sort last within each tie-breaker level", () => {
+    // plays 9 group: rating 3 (charlie) before the undefined rating (alpha)
+    expect(sortedIds(query(makeTracks()).sort("plays").sort("rating"))).toEqual([5, 2, 3, 4, 1]);
+  });
+
+  test("rows tied on a null primary key fall through to the tie-breaker", () => {
+    // undefined (alpha) and null (echo) both rank last on rating and tie
+    // there, so title orders them — not pipeline order
+    expect(sortedIds(query(makeTracks()).sort("rating").sort("title"))).toEqual([4, 5, 1, 2, 3]);
+  });
+
+  test("an intervening op ends the chain: the later sort is primary", () => {
+    // sort(title) materializes at its position; after the filter, sort(plays)
+    // starts a NEW ordering — title order survives only through stability
+    expect(
+      sortedIds(query(makeTracks()).sort("title").where("plays", ">", 9).sort("plays")),
+    ).toEqual([3, 4, 1]);
+  });
+
+  test("a limit between two sorts truncates the FIRST ordering", () => {
+    // plays desc gives [1, 4, 3, 2, 5]; limit keeps [1, 4, 3]; title orders those
+    expect(
+      sortedIds(query(makeTracks()).sort("plays", "desc").limit(3).sort("title")),
+    ).toEqual([4, 1, 3]);
+  });
+
+  test("chained sorting never mutates the source array or its rows", () => {
+    const tracks = makeTracks();
+    const snapshot = structuredClone(tracks);
+    query(tracks).sort("plays").sort("title", "desc").execute();
+    expect(tracks).toEqual(snapshot);
+  });
+
+  test("branching: chained-sort extensions of a shared sort prefix stay independent", () => {
+    const prefix = query(makeTracks()).sort("plays");
+    const byTitle = prefix.sort("title");
+    const byRating = prefix.sort("rating");
+    expect(sortedIds(byTitle)).toEqual([2, 5, 3, 4, 1]);
+    expect(sortedIds(byRating)).toEqual([5, 2, 3, 4, 1]);
+    expect(sortedIds(prefix)).toEqual([2, 5, 3, 1, 4]);
+    expect(prefix.explain()).toHaveLength(1);
+  });
+});
+
+describe("explain() with chained sorts (task 3.6)", () => {
+  test("composition is invisible in the plan: one description per sort call", () => {
+    expect(query(makeTracks()).sort("plays").sort("title", "desc").explain()).toEqual([
+      { kind: "sort", key: "plays", direction: "asc" },
+      { kind: "sort", key: "title", direction: "desc" },
+    ]);
+  });
+});

@@ -485,3 +485,44 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 176 tests pass (was 145; +31) at 100% line + function
   coverage, build OK.
 - Next: task 3.6 (chained `.sort()` tie-breakers — FIRST call primary).
+
+### 2026-07-10 — 3.6 Chained .sort() tie-breakers: FIRST call primary (DONE)
+
+- Tests first: `src/query.test.ts` 11 new cases across two describe groups (two-key,
+  mixed-direction and three-key composition on a new Player fixture with ties at every level;
+  full-tie stability; per-level nulls-last; null-tied primary falling through to the
+  tie-breaker; intervening where and limit ending the chain; source-snapshot; branching;
+  explain shows one description per call); watched RED (7 of 11 fail — chained sorts made
+  the LAST call primary, exactly the 3.5-recorded gap) before implementing.
+- Built interpretation-time composition in `src/query.ts`: `groupSortRuns` folds each maximal
+  run of CONSECUTIVE sort ops into one step, `applySortRun` sorts once with a comparator that
+  walks the run's keys in call order (each key keeps its own direction and nulls-last rank via
+  `compareForSort`; all-key ties return 0 so the stable native sort keeps pipeline order).
+  `applyOp` now takes `Exclude<PipelineOp<T>, SortDescription>` — no dead sort arm survives,
+  so 100% coverage stays honest. `src/ops.ts` unchanged.
+- DECISION — composition happens at EXECUTE time by grouping consecutive ops, not at call
+  time by merging descriptions: DESIGN section 7 pins explain() to one serializable
+  description per fluent call in call order, so the op list cannot merge; a composed
+  comparator gives first-call-primary directly and sorts each run once. Rejected the
+  reverse-order trick (apply stable sorts last-to-first) — it sorts N times and its
+  correctness rides non-obviously on stability; rejected merging in #extend — explain()
+  would lie about the call count. Pinned by the explain test: composition is invisible in
+  the plan.
+- DECISION — the comparator loop lives in query.ts, NOT ops.ts: compareForSort (single-value
+  ordering semantics) stays the guarded core; walking op descriptions is pipeline
+  interpretation, and ops.ts receives extracted values by convention (1.4/3.2 precedent) —
+  it never sees keys or op lists.
+- DECISION — a NON-SORT op between two sorts ENDS the run: `sort(a).where(p).sort(b)` sorts
+  by a at its position, filters, then sorts by b alone — b is primary and a's order survives
+  only through stability. Rationale: DESIGN section 7 pins pipeline ops to CALL order with no
+  hidden reordering, and an intervening op can OBSERVE the first ordering (a limit between
+  two sorts truncates the FIRST ordering — pinned by test), so the first sort must
+  materialize at its own position; composing across the gap would change what limit sees.
+  Reading of the DESIGN sort row: chained (adjacent) calls are one ORDER BY clause; a sort
+  after other ops is a new ORDER BY over a subquery. Flagged for human review.
+- Ties on a null primary key fall through to the tie-breaker (undefined and null both rank 2,
+  compare 0, next key decides) — pinned by test; pipeline order holds only when EVERY chained
+  key ties.
+- Gate: typecheck OK, lint clean, 187 tests pass (was 176; +11) at 100% line + function
+  coverage, build OK. No new type tests: 3.6 adds no API surface (sort signature unchanged).
+- Next: task 3.7 (`select(...keys)` — projection).

@@ -62,13 +62,16 @@ const PREDICATE_DESCRIPTION: WherePredicateDescription = Object.freeze({
   predicate: true,
 });
 
-// Interprets one op against the current pipeline rows, returning a new
-// array. Keyed descriptions store stringly keys (they must stay
-// serializable), so the row is re-read as an unknown field value at the
-// guarded-core boundary. A predicate is invoked with the row ALONE —
-// Array.filter's index and array stay internal, honoring the
-// (row: T) => boolean contract.
-function applyOp<T extends object>(rows: T[], op: PipelineOp<T>): T[] {
+// Interprets one non-sort op against the current pipeline rows, returning a
+// new array (sort ops travel as runs through applySortRun). Keyed
+// descriptions store stringly keys (they must stay serializable), so the row
+// is re-read as an unknown field value at the guarded-core boundary. A
+// predicate is invoked with the row ALONE — Array.filter's index and array
+// stay internal, honoring the (row: T) => boolean contract.
+function applyOp<T extends object>(
+  rows: T[],
+  op: Exclude<PipelineOp<T>, SortDescription>,
+): T[] {
   switch (op.kind) {
     case "where":
       return "predicate" in op
@@ -76,17 +79,54 @@ function applyOp<T extends object>(rows: T[], op: PipelineOp<T>): T[] {
         : rows.filter((row) =>
             evaluateWhere((row as Record<string, unknown>)[op.key], op.op, op.value),
           );
-    case "sort":
-      return [...rows].sort((a, b) =>
-        compareForSort(
-          (a as Record<string, unknown>)[op.key],
-          (b as Record<string, unknown>)[op.key],
-          op.direction,
-        ),
-      );
     case "limit":
       return rows.slice(0, op.count);
   }
+}
+
+// Consecutive sort ops compose as ONE multi-key ordering — the FIRST call is
+// the primary key and each later call breaks ties, like SQL ORDER BY a, b
+// (DESIGN section 7 sort row). Grouping happens here at interpretation time,
+// so the op list stays one entry per fluent call and explain() never shows a
+// merged op. Any other op ends the run: the earlier sort must materialize
+// its order at its own pipeline position (a limit between two sorts
+// truncates the FIRST ordering), so a later sort starts a fresh run and the
+// prior order survives only through stability.
+function groupSortRuns<T extends object>(
+  ops: readonly PipelineOp<T>[],
+): (Exclude<PipelineOp<T>, SortDescription> | SortDescription[])[] {
+  const steps: (Exclude<PipelineOp<T>, SortDescription> | SortDescription[])[] = [];
+  for (const op of ops) {
+    const previous = steps[steps.length - 1];
+    if (op.kind !== "sort") {
+      steps.push(op);
+    } else if (Array.isArray(previous)) {
+      previous.push(op);
+    } else {
+      steps.push([op]);
+    }
+  }
+  return steps;
+}
+
+// Applies one composed sort run: rows compare key by key in run order until
+// a key breaks the tie, each key keeping its own direction and its own
+// nulls-last ranking. Rows equal on EVERY key compare 0, so the stable
+// native sort keeps their pipeline order.
+function applySortRun<T extends object>(rows: T[], run: readonly SortDescription[]): T[] {
+  return [...rows].sort((a, b) => {
+    for (const op of run) {
+      const order = compareForSort(
+        (a as Record<string, unknown>)[op.key],
+        (b as Record<string, unknown>)[op.key],
+        op.direction,
+      );
+      if (order !== 0) {
+        return order;
+      }
+    }
+    return 0;
+  });
 }
 
 // Maps an internal op to its public, serializable description: data ops ARE
@@ -139,12 +179,12 @@ export class Query<T extends object> {
     return this.#extend({ kind: "where", key, op, value });
   }
 
-  // Stable single-key ordering at this pipeline position (DESIGN section 7
-  // sort row): only number | string keys are sortable, nullable ones
-  // included — null/undefined values sort LAST regardless of direction.
-  // The resolved direction is recorded explicitly, so a serialized plan
-  // never depends on knowing the default. Chained .sort() tie-breakers are
-  // task 3.6.
+  // Stable ordering at this pipeline position (DESIGN section 7 sort row):
+  // only number | string keys are sortable, nullable ones included —
+  // null/undefined values sort LAST regardless of direction. Directly
+  // chained sort calls compose as tie-breakers with the FIRST call primary
+  // (see groupSortRuns). The resolved direction is recorded explicitly, so
+  // a serialized plan never depends on knowing the default.
   sort(key: SortableKey<T>, direction: SortDirection = "asc"): Query<T> {
     return this.#extend({ kind: "sort", key, direction });
   }
@@ -161,14 +201,16 @@ export class Query<T extends object> {
     return this.#extend({ kind: "limit", count: n });
   }
 
-  // Runs the pipeline over the source, one op at a time, in call order
-  // (DESIGN section 7 pipeline-order row). The initial spread makes every
-  // call return a NEW array of the ORIGINAL row references — no deep copy,
-  // and the source is never mutated (DESIGN section 7 immutability row).
+  // Runs the pipeline over the source, one step at a time, in call order
+  // (DESIGN section 7 pipeline-order row); a step is a single op or a run
+  // of consecutive sorts composed into one ordering. The initial spread
+  // makes every call return a NEW array of the ORIGINAL row references — no
+  // deep copy, and the source is never mutated (DESIGN section 7
+  // immutability row).
   execute(): T[] {
     let rows = [...this.#source];
-    for (const op of this.#ops) {
-      rows = applyOp(rows, op);
+    for (const step of groupSortRuns(this.#ops)) {
+      rows = Array.isArray(step) ? applySortRun(rows, step) : applyOp(rows, step);
     }
     return rows;
   }

@@ -85,7 +85,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       Test first: asc default, desc; stable (equal keys keep pipeline order); `null`/`undefined`
       values sort LAST regardless of direction; explain entry. Type tests: non-sortable key
       (boolean/object field) must not compile (`SortableKey<T>`). (DESIGN §7 sort row)
-- [ ] 3.6 Chained `.sort()` tie-breakers — FIRST call is the primary key (SQL `ORDER BY a, b`).
+- [x] 3.6 Chained `.sort()` tie-breakers — FIRST call is the primary key (SQL `ORDER BY a, b`).
       Test first: two- and three-key composition proofs; stability preserved. DECISION to pin:
       composition mechanics (collapse consecutive sort ops into one comparator vs other
       strategies) AND the behavior of non-adjacent sorts (`sort(a).where(...).sort(b)`) —
