@@ -93,3 +93,46 @@ export function evaluateWhere(rowValue: unknown, op: WhereOperator, value: unkno
       return isOrderable(rowValue) && isOrderable(value) && compareRelational(rowValue, op, value);
   }
 }
+
+export type AggregateKind = "count" | "sum" | "avg" | "min" | "max";
+
+// Aggregate semantics (DESIGN sections 6-7). The caller extracts the field
+// values (count works on whole rows, so it needs no key); the key is carried
+// only so the empty-set error can name it. Empty-set pins: count -> 0,
+// sum -> 0, avg/min/max throw RangeError naming the aggregate and the key.
+// NaN values (a legal number by type) and non-number values (data lying
+// about its static type) poison the numeric aggregates to NaN — never
+// skipped like SQL NULLs, never coerced like raw JS arithmetic, never
+// thrown (DESIGN section 7 locks the runtime error set).
+export function computeAggregate(values: readonly unknown[], kind: "count"): number;
+export function computeAggregate(
+  values: readonly unknown[],
+  kind: Exclude<AggregateKind, "count">,
+  key: string,
+): number;
+export function computeAggregate(
+  values: readonly unknown[],
+  kind: AggregateKind,
+  key = "",
+): number {
+  if (kind === "count") {
+    return values.length;
+  }
+  if (values.length === 0) {
+    if (kind === "sum") {
+      return 0;
+    }
+    throw new RangeError(`Cannot compute ${kind}("${key}") of an empty set`);
+  }
+  const numbers = values.map((value) => (typeof value === "number" ? value : NaN));
+  switch (kind) {
+    case "sum":
+      return numbers.reduce((total, value) => total + value, 0);
+    case "avg":
+      return numbers.reduce((total, value) => total + value, 0) / numbers.length;
+    case "min":
+      return numbers.some(Number.isNaN) ? NaN : numbers.reduce((a, b) => (b < a ? b : a));
+    case "max":
+      return numbers.some(Number.isNaN) ? NaN : numbers.reduce((a, b) => (b > a ? b : a));
+  }
+}

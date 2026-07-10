@@ -201,3 +201,39 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 70 tests pass (was 41; +29) at 100% line +
   function coverage, build OK.
 - Next: task 1.4 (aggregate computations: `count`, `sum`, `avg`, `min`, `max`).
+
+### 2026-07-10 — 1.4 Aggregate computations: count, sum, avg, min, max (DONE)
+
+- Tests first: `src/ops.test.ts`, 22 new tests across seven describe groups (count incl.
+  degenerate values; sum incl. empty -> 0 pin and readonly input; avg; min/max incl.
+  infinities; empty-set RangeError with exact messages; NaN/non-number poisoning); watched
+  RED (`SyntaxError: Export named 'computeAggregate' not found in module 'src/ops.ts'`)
+  before implementing.
+- Built `computeAggregate(values, kind, key?)` plus the `AggregateKind` type in `src/ops.ts`
+  (guarded core): count -> length, empty-set branch (sum -> 0, avg/min/max throw), then a
+  non-number-to-NaN normalization pass and an exhaustive switch. ~30 lines.
+- DECISION — interface takes extracted VALUES, not rows + key: the caller (query.ts, task
+  3.8/3.10) extracts `row[key]` itself, which stays fully typed under `K extends keyof T`;
+  a rows-based signature would force a `Record<string, unknown>` cast at every call site.
+  Mirrors evaluateWhere receiving the extracted rowValue. The key parameter is carried only
+  so the empty-set error can name it (DESIGN section 7). Overloads make `count` keyless and
+  the numeric aggregates key-required at compile time.
+- DECISION — empty-set RangeError message pinned EXACTLY as
+  `Cannot compute avg("price") of an empty set` (kind and key interpolated): tests assert
+  the full message, not a substring, so the message is now API surface. Rationale: DESIGN
+  section 7 requires the message to name the aggregate and the key; pinning the exact shape
+  prevents silent drift.
+- DECISION — NaN and non-number values POISON numeric aggregates to NaN (never skip, never
+  coerce, never throw): skipping is SQL-NULL-style normalization the engine performs nowhere
+  else; raw JS coercion (`1 + null === 1`, `1 + "2" === "12"`) is silent garbage; throwing
+  breaks the DESIGN section 7 locked error set. NaN is genuinely reachable through the typed
+  API (NaN is a `number`), so this is not just a lying-data path. min/max need an explicit
+  `some(Number.isNaN)` guard because `<` is always false on NaN and a plain reduce would
+  skip it order-dependently; the guard matches Math.min/Math.max semantics. Flagged for
+  human review.
+- KNOWN LIMITATION (recorded): sum/avg use naive left-to-right IEEE-754 summation (no Kahan
+  compensation) — float error on large or ill-conditioned inputs is accepted; a readable
+  reduce beats a compensated loop for this engine's size budget.
+- Gate: typecheck OK, lint clean, 92 tests pass (was 70; +22) at 100% line + function
+  coverage, build OK.
+- Next: task 2.1 (type machinery: `src/types.ts` + compile-time test harness).

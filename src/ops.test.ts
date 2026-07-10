@@ -7,9 +7,19 @@
 // (decisions recorded in loop/PROGRESS.md, task 1.2). evaluateWhere pins
 // the single entry point for all 7 operators, including the false-not-throw
 // convention for type-invalid operands (decisions recorded in
-// loop/PROGRESS.md, task 1.3).
+// loop/PROGRESS.md, task 1.3). computeAggregate pins the aggregate
+// semantics from DESIGN section 7: empty-set behaviors (count/sum -> 0,
+// avg/min/max throw a RangeError naming the aggregate and the key) and the
+// NaN-poisoning stance for non-number values (decisions recorded in
+// loop/PROGRESS.md, task 1.4).
 import { describe, expect, test } from "bun:test";
-import { compareRelational, deepEqual, evaluateWhere, type WhereOperator } from "./ops";
+import {
+  compareRelational,
+  computeAggregate,
+  deepEqual,
+  evaluateWhere,
+  type WhereOperator,
+} from "./ops";
 
 describe("deepEqual: primitives are type-sensitive", () => {
   test("equal primitives of the same type", () => {
@@ -365,5 +375,126 @@ describe("evaluateWhere: in with a non-array value is false, not a throw (pinned
   test("a readonly array literal works as the membership pool", () => {
     const pool = [1, 2, 3] as const;
     expect(evaluateWhere(2, "in", pool)).toBe(true);
+  });
+});
+
+describe("computeAggregate: count counts values, ignoring their content", () => {
+  test("counts the values it is given", () => {
+    expect(computeAggregate([10, 20, 30], "count")).toBe(3);
+  });
+
+  test("counts non-numeric and degenerate values alike", () => {
+    expect(computeAggregate([null, undefined, NaN, "x"], "count")).toBe(4);
+  });
+
+  test("count of an empty set is 0 (pinned)", () => {
+    expect(computeAggregate([], "count")).toBe(0);
+  });
+});
+
+describe("computeAggregate: sum", () => {
+  test("adds numeric values", () => {
+    expect(computeAggregate([1, 2, 3], "sum", "price")).toBe(6);
+  });
+
+  test("handles negatives and floats", () => {
+    expect(computeAggregate([-1.5, 2.5, -1], "sum", "delta")).toBe(0);
+  });
+
+  test("a single value sums to itself", () => {
+    expect(computeAggregate([7], "sum", "n")).toBe(7);
+  });
+
+  test("sum of an empty set is 0 (pinned)", () => {
+    expect(computeAggregate([], "sum", "price")).toBe(0);
+  });
+
+  test("a readonly values array is accepted", () => {
+    const values = [1, 2, 3] as const;
+    expect(computeAggregate(values, "sum", "n")).toBe(6);
+  });
+});
+
+describe("computeAggregate: avg", () => {
+  test("arithmetic mean of the values", () => {
+    expect(computeAggregate([2, 4, 6], "avg", "score")).toBe(4);
+  });
+
+  test("the mean need not be an integer", () => {
+    expect(computeAggregate([1, 2], "avg", "score")).toBe(1.5);
+  });
+
+  test("a single value is its own mean", () => {
+    expect(computeAggregate([9], "avg", "score")).toBe(9);
+  });
+});
+
+describe("computeAggregate: min and max", () => {
+  test("min picks the smallest value", () => {
+    expect(computeAggregate([3, 1, 2], "min", "n")).toBe(1);
+  });
+
+  test("max picks the largest value", () => {
+    expect(computeAggregate([3, 9, 2], "max", "n")).toBe(9);
+  });
+
+  test("negative values order numerically", () => {
+    expect(computeAggregate([-3, -9, -2], "min", "n")).toBe(-9);
+    expect(computeAggregate([-3, -9, -2], "max", "n")).toBe(-2);
+  });
+
+  test("a single value is both min and max", () => {
+    expect(computeAggregate([5], "min", "n")).toBe(5);
+    expect(computeAggregate([5], "max", "n")).toBe(5);
+  });
+
+  test("infinities are legal extremes", () => {
+    expect(computeAggregate([1, -Infinity], "min", "n")).toBe(-Infinity);
+    expect(computeAggregate([1, Infinity], "max", "n")).toBe(Infinity);
+  });
+});
+
+describe("computeAggregate: avg/min/max over an empty set throw RangeError (pinned)", () => {
+  test("avg throws a RangeError naming the aggregate and the key", () => {
+    expect(() => computeAggregate([], "avg", "price")).toThrow(RangeError);
+    expect(() => computeAggregate([], "avg", "price")).toThrow(
+      new RangeError('Cannot compute avg("price") of an empty set'),
+    );
+  });
+
+  test("min throws a RangeError naming the aggregate and the key", () => {
+    expect(() => computeAggregate([], "min", "score")).toThrow(RangeError);
+    expect(() => computeAggregate([], "min", "score")).toThrow(
+      new RangeError('Cannot compute min("score") of an empty set'),
+    );
+  });
+
+  test("max throws a RangeError naming the aggregate and the key", () => {
+    expect(() => computeAggregate([], "max", "qty")).toThrow(RangeError);
+    expect(() => computeAggregate([], "max", "qty")).toThrow(
+      new RangeError('Cannot compute max("qty") of an empty set'),
+    );
+  });
+});
+
+describe("computeAggregate: NaN and non-number values poison the result (pinned decision)", () => {
+  test("a NaN value makes every numeric aggregate NaN", () => {
+    expect(computeAggregate([1, NaN, 3], "sum", "n")).toBeNaN();
+    expect(computeAggregate([1, NaN, 3], "avg", "n")).toBeNaN();
+    expect(computeAggregate([1, NaN, 3], "min", "n")).toBeNaN();
+    expect(computeAggregate([1, NaN, 3], "max", "n")).toBeNaN();
+  });
+
+  test("non-number values (lying data) poison to NaN instead of coercing", () => {
+    // raw JS would coerce: 1 + "2" === "12", 1 + null === 1 — both are
+    // silent garbage the engine refuses to produce
+    expect(computeAggregate([1, "2", 3], "sum", "n")).toBeNaN();
+    expect(computeAggregate([1, null, 3], "avg", "n")).toBeNaN();
+    expect(computeAggregate([1, undefined, 3], "min", "n")).toBeNaN();
+    expect(computeAggregate([{ n: 1 }, 3], "max", "n")).toBeNaN();
+  });
+
+  test("count is immune: it counts values, it does not read them", () => {
+    expect(computeAggregate([NaN, "2", null], "count")).toBe(3);
   });
 });

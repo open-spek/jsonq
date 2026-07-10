@@ -43,7 +43,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
 - [x] 1.3 `evaluateWhere(rowValue, op, value)` — one entry point for all 7 operators.
       Test first: table-driven cases per DESIGN §6 — `==`/`!=` via deepEqual, relational via
       1.2, `in` membership via deepEqual over a readonly array. (DESIGN §6 complete operator set)
-- [ ] 1.4 Aggregate computations: `count`, `sum`, `avg`, `min`, `max` over rows + numeric key.
+- [x] 1.4 Aggregate computations: `count`, `sum`, `avg`, `min`, `max` over rows + numeric key.
       Test first: normal cases; empty-set pins — `count` -> 0, `sum` -> 0, `avg`/`min`/`max`
       throw `RangeError` whose MESSAGE names the aggregate and the key (assert the message).
       (DESIGN §7 empty-set aggregates row)
