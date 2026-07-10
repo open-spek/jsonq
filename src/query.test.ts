@@ -95,3 +95,127 @@ describe("query independence (precursor to the 3.2 branching proof)", () => {
     expect(firstResult).not.toBe(second.execute());
   });
 });
+
+describe("where(key, op, value): operator filtering (task 3.2)", () => {
+  test("== keeps rows whose field deep-equals the value (array field, structural)", () => {
+    const result = query(makeUsers()).where("tags", "==", ["math"]).execute();
+    expect(result).toEqual([{ id: 1, name: "ada", tags: ["math"] }]);
+  });
+
+  test("!= keeps the complement", () => {
+    const result = query(makeUsers()).where("name", "!=", "ada").execute();
+    expect(result).toEqual([
+      { id: 2, name: "grace", tags: [] },
+      { id: 3, name: "linus", tags: ["kernel", "vcs"] },
+    ]);
+  });
+
+  test("relational operators filter a number field", () => {
+    const users = makeUsers();
+    const ids = (op: "<" | "<=" | ">" | ">=", value: number): number[] =>
+      query(users)
+        .where("id", op, value)
+        .execute()
+        .map((user) => user.id);
+    expect(ids("<", 2)).toEqual([1]);
+    expect(ids("<=", 2)).toEqual([1, 2]);
+    expect(ids(">", 2)).toEqual([3]);
+    expect(ids(">=", 2)).toEqual([2, 3]);
+  });
+
+  test("relational operators on a string field use code-unit order", () => {
+    const names = query(makeUsers())
+      .where("name", ">", "b")
+      .execute()
+      .map((user) => user.name);
+    expect(names).toEqual(["grace", "linus"]);
+  });
+
+  test("in keeps rows whose field deep-equals any pool member", () => {
+    const ids = query(makeUsers())
+      .where("id", "in", [1, 3])
+      .execute()
+      .map((user) => user.id);
+    expect(ids).toEqual([1, 3]);
+  });
+
+  test("in accepts a readonly pool", () => {
+    const pool: readonly string[] = ["ada", "linus"];
+    const ids = query(makeUsers())
+      .where("name", "in", pool)
+      .execute()
+      .map((user) => user.id);
+    expect(ids).toEqual([1, 3]);
+  });
+
+  test("matched rows are the ORIGINAL row references", () => {
+    const users = makeUsers();
+    const result = query(users).where("id", ">", 1).execute();
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(users[1]);
+    expect(result[1]).toBe(users[2]);
+  });
+
+  test("chained wheres AND together in call order", () => {
+    const result = query(makeUsers()).where("id", ">", 1).where("name", "==", "grace").execute();
+    expect(result).toEqual([{ id: 2, name: "grace", tags: [] }]);
+  });
+
+  test("a where with no matches yields an empty array", () => {
+    expect(query(makeUsers()).where("name", "==", "nobody").execute()).toEqual([]);
+  });
+
+  test("filtering never mutates the source array or its rows", () => {
+    const users = makeUsers();
+    const snapshot = structuredClone(users);
+    query(users).where("id", ">=", 2).execute();
+    expect(users).toEqual(snapshot);
+  });
+});
+
+describe("explain() with where ops (task 3.2)", () => {
+  test("each where call adds one { kind: 'where' } description, in call order", () => {
+    const plan = query(makeUsers()).where("id", ">", 1).where("name", "in", ["grace"]).explain();
+    expect(plan).toEqual([
+      { kind: "where", key: "id", op: ">", value: 1 },
+      { kind: "where", key: "name", op: "in", value: ["grace"] },
+    ]);
+  });
+
+  test("descriptions are serializable: they survive a JSON round-trip", () => {
+    const plan = query(makeUsers()).where("tags", "==", ["math"]).explain();
+    expect(JSON.parse(JSON.stringify(plan))).toEqual([
+      { kind: "where", key: "tags", op: "==", value: ["math"] },
+    ]);
+  });
+
+  test("the extended op list and its descriptions are frozen", () => {
+    const plan = query(makeUsers()).where("id", ">", 1).explain();
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan[0])).toBe(true);
+  });
+});
+
+describe("branching: extensions of a shared prefix are independent (deferred 3.1 proof)", () => {
+  test("where() returns a new query and leaves the receiver untouched", () => {
+    const base = query(makeUsers());
+    const extended = base.where("id", ">", 1);
+    expect(extended).not.toBe(base);
+    expect(base.explain()).toEqual([]);
+    expect(base.execute()).toEqual(makeUsers());
+  });
+
+  test("two queries extended from one shared prefix stay independent", () => {
+    const prefix = query(makeUsers()).where("id", ">", 1);
+    const graceOnly = prefix.where("name", "==", "grace");
+    const linusOnly = prefix.where("name", "==", "linus");
+
+    expect(graceOnly.execute().map((user) => user.name)).toEqual(["grace"]);
+    expect(linusOnly.execute().map((user) => user.name)).toEqual(["linus"]);
+    expect(prefix.execute().map((user) => user.name)).toEqual(["grace", "linus"]);
+
+    expect(prefix.explain()).toHaveLength(1);
+    expect(graceOnly.explain()).toHaveLength(2);
+    expect(linusOnly.explain()).toHaveLength(2);
+  });
+});

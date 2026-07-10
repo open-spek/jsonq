@@ -100,6 +100,45 @@ export type AggregateOnOptionalNumber = NumericKeyAllows<Product, "discount">;
 // @ts-expect-error an unknown key is not an aggregate key
 export type AggregateOnUnknownKey = NumericKeyAllows<Product, "missing">;
 
+// -- where(key, op, value) API surface (task 3.2) -------------------------------
+// The probes above check the type machinery in isolation; these check that the
+// where METHOD is actually wired through it. `declare const` exists only for
+// `typeof` instantiation expressions and is never evaluated; the call-site
+// probe function is never called and the file never runs.
+
+// Exported so no-unused-vars accepts a value binding used only in typeof.
+export declare const productQuery: Query<Product>;
+
+export type WhereApiCases = [
+  // where returns Query<T> unchanged — filtering never narrows the row type
+  Expect<Equal<ReturnType<typeof productQuery.where<"price", ">">>, Query<Product>>>,
+  // value parameter locked to T[K] for plain operators
+  Expect<Equal<Parameters<typeof productQuery.where<"price", ">">>[2], number>>,
+  Expect<Equal<Parameters<typeof productQuery.where<"rating", "==">>[2], number | null>>,
+  // value parameter locked to readonly T[K][] for `in`
+  Expect<Equal<Parameters<typeof productQuery.where<"name", "in">>[2], readonly string[]>>,
+];
+
+export function whereCallSites(q: Query<Product>): void {
+  // Positive call sites: one per operator category of the section 6 table.
+  q.where("price", ">", 10);
+  q.where("name", "==", "widget");
+  q.where("tags", "==", ["a", "b"]);
+  q.where("sku", "<=", 100);
+  q.where("rating", "==", null);
+  q.where("supplier", "==", { id: 1 });
+  q.where("name", "in", ["a", "b"] as const);
+
+  // @ts-expect-error an unknown key must not compile
+  q.where("missing", "==", 1);
+  // @ts-expect-error value type must match the field type (string field, number value)
+  q.where("name", ">", 5);
+  // @ts-expect-error relational operator on a boolean field must not compile
+  q.where("active", ">", true);
+  // @ts-expect-error in requires a readonly pool of the field type, not a bare value
+  q.where("name", "in", "a");
+}
+
 // -- Query<T> skeleton (DESIGN section 6: query() entry point, terminals) ------
 
 export type QuerySkeletonCases = [

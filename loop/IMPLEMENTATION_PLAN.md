@@ -67,7 +67,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       from `src/index.ts`. Test first: immutability proofs (snapshot source, execute, deep
       re-compare), result-is-new-array proof, branching proof (two queries extended from one
       shared prefix stay independent). (DESIGN §3 architecture lock, §7 immutability row)
-- [ ] 3.2 `where(key, op, value)` — typed operator filtering.
+- [x] 3.2 `where(key, op, value)` — typed operator filtering.
       Test first: runtime filtering per operator (delegates to `ops.evaluateWhere`); explain
       gains a serializable `{ kind: "where", ... }` entry per call. Type tests: unknown key,
       `where("name", ">", 5)`, `where("active", ">", true)` all `@ts-expect-error`; `in` value

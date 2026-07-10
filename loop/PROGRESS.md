@@ -318,3 +318,43 @@ Rules (from the reference build's real notebook):
   coverage (index.ts, ops.ts, query.ts all in the table), build OK (dist gains query.js/.d.ts).
 - Next: task 3.2 (`where(key, op, value)` — typed operator filtering; includes the deferred
   branching proof).
+
+### 2026-07-10 — 3.2 where(key, op, value): typed operator filtering (DONE)
+
+- Tests first: `src/query.test.ts` 15 new cases across three describe groups (operator
+  filtering incl. deep structural == on an array field, all four relationals, readonly `in`
+  pool, original-reference and source-snapshot proofs; explain entries incl. JSON round-trip
+  and frozen descriptions; the branching proofs deferred from 3.1), `src/index.test.ts`
+  end-to-end test extended with a where chain, `src/type-tests.ts` gains 4 `Expect<Equal>`
+  API positives, 7 positive call sites, 4 `@ts-expect-error` negatives; watched RED (`TS2339:
+  Property 'where' does not exist on type 'Query<User>'`, bun: 16 fail) before implementing.
+- Built `where()` on Query plus the first real pipeline: `OpDescription` union's `never`
+  replaced by the `{ kind: "where", key, op, value }` member, module-level `applyOp` switch
+  (exhaustive, no default — future kinds fail typecheck), `#extend` helper freezing both the
+  new op list and the description object. Signature is
+  `where<K extends keyof T & string, Op extends OperatorFor<T[K]>>(key: K, op: Op, value:
+  WhereValue<T[K], Op>)` — Op captured as its own type parameter so the value type pivots on
+  the operator literal (`in` -> `readonly T[K][]`, else `T[K]`).
+- DECISION — descriptions store the key as a plain string and the value BY REFERENCE (no
+  defensive copy, shallow freeze only): explain() must stay JSON-serializable, and deep
+  copies/deep freezes are rejected by DESIGN section 8's no-deep-copy stance. Consequence:
+  execute() re-reads the row field at the guarded-core boundary through one
+  `row as Record<string, unknown>` cast — the honest place for it, since the typed key was
+  verified at the where() call site and the description is deliberately stringly.
+- DECISION — API-level type tests use `typeof productQuery.where<...>` instantiation
+  expressions plus never-called call-site probe functions in type-tests.ts: the 2.1
+  constraint probes check OperatorFor/WhereValue in isolation, but only call-site tests
+  prove the METHOD is wired through them (a signature typed `op: WhereOperator` would pass
+  every 2.1 probe). The `declare const` for typeof is exported because
+  `@typescript-eslint/no-unused-vars` flags value bindings used only as types.
+- Negative honesty probed, not assumed (0.1/2.1 precedent): re-ran the four negatives
+  without directives in a scratch file — each fails at the intended parameter (unknown key
+  rejected at key, `where("name", ">", 5)` at value `number` vs `string`, boolean relational
+  at op `">"` vs `"==" | "!=" | "in"`, bare `in` value vs `readonly string[]`). Scratch
+  removed before commit.
+- KNOWN LIMITATION (recorded): a caller who mutates an object/array VALUE after passing it
+  to where() changes the pipeline (descriptions hold references, freeze is shallow) —
+  consistent with the engine-wide no-deep-copy semantics, to be documented in F.1 README.
+- Gate: typecheck OK, lint clean, 117 tests pass (was 102; +15) at 100% line + function
+  coverage, build OK.
+- Next: task 3.3 (`where(predicate)` overload — typed escape hatch).
