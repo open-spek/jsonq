@@ -824,3 +824,100 @@ describe("explain() with select ops (task 3.7)", () => {
     }).toThrow(TypeError);
   });
 });
+
+describe("ungrouped aggregates: count/sum/avg/min/max (task 3.8)", () => {
+  test("count() with no ops returns the source row count", () => {
+    expect(query(makeTracks()).count()).toBe(5);
+  });
+
+  test("count() runs the pipeline first: a where filters before counting", () => {
+    expect(query(makeTracks()).where("plays", ">", 9).count()).toBe(3);
+  });
+
+  test("aggregates see the pipeline in CALL order: limit before where truncates first", () => {
+    // limit(2) keeps ids [1, 2]; the filter then leaves only id 1
+    expect(query(makeTracks()).limit(2).where("plays", ">", 9).count()).toBe(1);
+  });
+
+  test("sum totals a numeric field over the pipeline result", () => {
+    expect(query(makeTracks()).sum("plays")).toBe(238);
+    expect(query(makeTracks()).where("plays", "<", 100).sum("plays")).toBe(38);
+  });
+
+  test("avg divides the sum by the pipeline row count", () => {
+    expect(query(makeTracks()).avg("plays")).toBeCloseTo(47.6);
+    expect(query(makeTracks()).where("plays", "==", 9).avg("plays")).toBe(9);
+  });
+
+  test("min and max find the extremes of the pipeline result", () => {
+    expect(query(makeTracks()).min("plays")).toBe(9);
+    expect(query(makeTracks()).max("plays")).toBe(100);
+    expect(query(makeTracks()).where("plays", "<", 100).max("plays")).toBe(20);
+  });
+
+  test("aggregates work on projected rows after a select", () => {
+    expect(query(makeTracks()).select("plays").sum("plays")).toBe(238);
+  });
+
+  test("a NaN field value poisons numeric aggregates through the query surface", () => {
+    // NaN is a legal number by type, so this path is reachable without lying
+    const rows = [{ n: 1 }, { n: NaN }];
+    expect(query(rows).sum("n")).toBeNaN();
+    expect(query(rows).min("n")).toBeNaN();
+  });
+
+  test("aggregates never mutate the source array or its rows", () => {
+    const tracks = makeTracks();
+    const snapshot = structuredClone(tracks);
+    query(tracks).where("plays", ">", 9).sum("plays");
+    expect(tracks).toEqual(snapshot);
+  });
+
+  test("aggregates are terminal reads: no op is recorded on the receiver", () => {
+    const q = query(makeTracks()).where("plays", ">", 9);
+    q.count();
+    q.sum("plays");
+    q.avg("plays");
+    q.min("plays");
+    q.max("plays");
+    expect(q.explain()).toEqual([{ kind: "where", key: "plays", op: ">", value: 9 }]);
+    expect(q.execute()).toHaveLength(3);
+  });
+});
+
+describe("empty-set aggregates through the pipeline (task 3.8, DESIGN section 7)", () => {
+  const emptied = (): ReturnType<typeof query<Track>> =>
+    query(makeTracks()).where("plays", ">", 1000);
+
+  test("count() of an empty pipeline result is 0", () => {
+    expect(emptied().count()).toBe(0);
+    expect(query([] as Track[]).count()).toBe(0);
+  });
+
+  test("sum() of an empty pipeline result is 0", () => {
+    expect(emptied().sum("plays")).toBe(0);
+  });
+
+  test("avg over an empty pipeline result throws RangeError naming aggregate and key", () => {
+    expect(() => emptied().avg("plays")).toThrow(
+      new RangeError('Cannot compute avg("plays") of an empty set'),
+    );
+  });
+
+  test("min over an empty pipeline result throws RangeError naming aggregate and key", () => {
+    expect(() => emptied().min("plays")).toThrow(
+      new RangeError('Cannot compute min("plays") of an empty set'),
+    );
+  });
+
+  test("max over an empty pipeline result throws RangeError naming aggregate and key", () => {
+    // a different key proves the key is interpolated, not copied from a test
+    expect(() => emptied().max("id")).toThrow(
+      new RangeError('Cannot compute max("id") of an empty set'),
+    );
+  });
+
+  test("limit(0) empties the pipeline the same way a filter does", () => {
+    expect(() => query(makeTracks()).limit(0).avg("plays")).toThrow(RangeError);
+  });
+});

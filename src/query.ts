@@ -4,9 +4,9 @@
 // interprets the list once, in call order. The fluent methods land one per
 // task (3.2-3.10), each adding its op kind to the unions below.
 
-import { compareForSort, evaluateWhere } from "./ops";
-import type { SortDirection, WhereOperator } from "./ops";
-import type { OperatorFor, SortableKey, WhereValue } from "./types";
+import { compareForSort, computeAggregate, evaluateWhere } from "./ops";
+import type { AggregateKind, SortDirection, WhereOperator } from "./ops";
+import type { KeysOfType, OperatorFor, SortableKey, WhereValue } from "./types";
 
 // Serializable op descriptions returned by explain(), discriminated by
 // `kind` (DESIGN section 7 explain row). Keys are recorded as plain strings
@@ -239,6 +239,43 @@ export class Query<T extends object> {
     return this.#extend({ kind: "select", keys: Object.freeze(keys) }) as unknown as Query<
       Pick<T, K>
     >;
+  }
+
+  // Ungrouped aggregates (DESIGN section 6): terminal reads that run the
+  // full pipeline and reduce the result in one step. No op is recorded, so
+  // the receiver and its plan stay untouched and reusable. count counts
+  // whole rows and needs no key; the numeric aggregates accept only
+  // exact-number keys (KeysOfType<T, number> — nullable and optional number
+  // fields are out, because a compile error beats a NaN-poisoned result).
+  // The empty-set semantics — count/sum -> 0, avg/min/max -> RangeError
+  // naming the aggregate and the key — surface directly from the guarded
+  // core (DESIGN section 7 empty-set row).
+  count(): number {
+    return computeAggregate(this.execute(), "count");
+  }
+
+  sum(key: KeysOfType<T, number>): number {
+    return this.#aggregate("sum", key);
+  }
+
+  avg(key: KeysOfType<T, number>): number {
+    return this.#aggregate("avg", key);
+  }
+
+  min(key: KeysOfType<T, number>): number {
+    return this.#aggregate("min", key);
+  }
+
+  max(key: KeysOfType<T, number>): number {
+    return this.#aggregate("max", key);
+  }
+
+  // Extracts the keyed field value from every pipeline row, then hands the
+  // numeric semantics to the guarded core (1.4 convention: ops.ts receives
+  // extracted values, never rows or keys to read on its own).
+  #aggregate(kind: Exclude<AggregateKind, "count">, key: string): number {
+    const values = this.execute().map((row) => (row as Record<string, unknown>)[key]);
+    return computeAggregate(values, kind, key);
   }
 
   // Runs the pipeline over the source, one step at a time, in call order

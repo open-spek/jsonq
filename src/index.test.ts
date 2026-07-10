@@ -21,4 +21,6 @@ test("public surface: query() builds an executable query end to end", () => {
     { kind: "where", predicate: true },
     { kind: "select", keys: ["id"] },
   ]);
+  expect(query(rows).where("id", ">", 1).count()).toBe(2);
+  expect(query(rows).sum("id")).toBe(6);
 });

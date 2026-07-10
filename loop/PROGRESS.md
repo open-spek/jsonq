@@ -578,3 +578,45 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 203 tests pass (was 187; +16) at 100% line + function
   coverage, build OK.
 - Next: task 3.8 (ungrouped aggregates count/sum/avg/min/max on Query<T>).
+
+### 2026-07-10 — 3.8 Ungrouped aggregates: count/sum/avg/min/max on Query<T> (DONE)
+
+- Tests first: `src/query.test.ts` 16 new cases across two describe groups (pipeline-then-
+  reduce incl. limit-before-where call-order proof, sum/avg/min/max normal cases, aggregates
+  over projected rows, NaN poisoning reachable through the typed API, source-snapshot proof,
+  terminal-read proof — five aggregate calls leave the receiver's plan and execute() intact;
+  empty-set semantics through the pipeline incl. exact RangeError messages on two DIFFERENT
+  keys and limit(0) as the emptier), `src/index.test.ts` e2e gains count and sum through the
+  public surface, `src/type-tests.ts` gains 10 `Expect<Equal>` API positives (count keyless,
+  four numeric aggregates locked to `[key: "id" | "price"]`, all returning number), 7 positive
+  call sites, 6 `@ts-expect-error` negatives; watched RED (`TS2339: Property 'count' does not
+  exist on type 'Query<Track>'` at every call site; bun: 17 fail) before implementing.
+- Built five terminal methods on Query plus a private `#aggregate(kind, key)` helper:
+  count() feeds whole pipeline rows to `computeAggregate(rows, "count")`; the numeric four
+  extract `row[key]` per row (one `row as Record<string, unknown>` cast at the guarded-core
+  boundary, 3.2 precedent) and delegate to `computeAggregate(values, kind, key)`. No op kind
+  added — `OpDescription`, `PipelineOp`, and applyOp are untouched. ~35 lines.
+- DECISION — aggregates are TERMINAL READS, not recorded ops: DESIGN section 6 types them
+  `(): number`, so they cannot return Query and be part of a plan; they call execute()
+  internally and the receiver stays reusable (pinned by test: five aggregate calls, then
+  explain() and execute() unchanged). Consequence: an aggregate never appears in explain() —
+  the plan describes the pipeline, and the reduction happens after it. Rejected recording a
+  pseudo-op for explain visibility (an op that cannot be in an op LIST the fluent chain can
+  extend past would be a lie about the pipeline shape).
+- DECISION — empty-set RangeError propagates RAW from the guarded core (no catch/rewrap in
+  query.ts): the 1.4 message already names the aggregate and the key exactly as DESIGN
+  section 7 requires, and wrapping would either change the pinned message or add a second
+  error type to the locked runtime-error set. Pinned through the pipeline with two different
+  keys so the interpolation (not a fixed string) is what the tests prove.
+- DECISION — delegation direction confirmed: extraction lives in query.ts (`#aggregate`),
+  semantics in ops.ts — the 1.4-recorded interface (ops receives extracted VALUES) held with
+  zero changes to ops.ts this task, which is the payoff of deciding it there. NaN poisoning
+  and count-of-anything came through the surface for free (pinned by the NaN test).
+- KNOWN LIMITATION (recorded): each aggregate call re-runs the FULL pipeline (count() then
+  sum() executes twice) — consistent with execute() itself returning fresh runs; callers
+  wanting both should execute() once and reduce themselves, or wait for grouped aggregate(),
+  which computes a whole spec in one run (3.10). Acceptable: O(n) per op is documented and
+  DESIGN section 8 rejects optimization.
+- Gate: typecheck OK, lint clean, 219 tests pass (was 203; +16) at 100% line + function
+  coverage, build OK.
+- Next: task 3.9 (`groupBy(key)` -> `GroupedQuery<T, K>` and its execute()).

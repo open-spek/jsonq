@@ -256,6 +256,50 @@ export function selectZeroKeys(q: Query<Product>): Query<Pick<Product, never>> {
   return q.select();
 }
 
+// -- Ungrouped aggregates API surface (task 3.8) ----------------------------------
+// The 2.1 NumericKeyAllows probes check KeysOfType in isolation; these check
+// that the aggregate METHODS are wired through it: count is keyless, and the
+// numeric aggregates accept exactly the exact-number keys of the row type
+// (nullable and optional number fields are out — see the 2.1 KeysOfType record).
+
+export type AggregateApiCases = [
+  Expect<Equal<Parameters<Query<Product>["count"]>, []>>,
+  Expect<Equal<ReturnType<Query<Product>["count"]>, number>>,
+  Expect<Equal<Parameters<Query<Product>["sum"]>, [key: "id" | "price"]>>,
+  Expect<Equal<ReturnType<Query<Product>["sum"]>, number>>,
+  Expect<Equal<Parameters<Query<Product>["avg"]>, [key: "id" | "price"]>>,
+  Expect<Equal<ReturnType<Query<Product>["avg"]>, number>>,
+  Expect<Equal<Parameters<Query<Product>["min"]>, [key: "id" | "price"]>>,
+  Expect<Equal<ReturnType<Query<Product>["min"]>, number>>,
+  Expect<Equal<Parameters<Query<Product>["max"]>, [key: "id" | "price"]>>,
+  Expect<Equal<ReturnType<Query<Product>["max"]>, number>>,
+];
+
+export function aggregateCallSites(q: Query<Product>): void {
+  // Positive call sites: exact-number keys aggregate; keys surviving a
+  // projection stay aggregatable.
+  q.count();
+  q.sum("price");
+  q.avg("price");
+  q.min("id");
+  q.max("price");
+  q.where("price", ">", 10).sum("price");
+  q.select("id", "name").sum("id");
+
+  // @ts-expect-error count takes no key
+  q.count("id");
+  // @ts-expect-error a string field is not a numeric aggregate key
+  q.sum("name");
+  // @ts-expect-error a nullable number field is not a numeric aggregate key
+  q.avg("rating");
+  // @ts-expect-error an optional number field is not a numeric aggregate key
+  q.min("discount");
+  // @ts-expect-error an unknown key is not an aggregate key
+  q.max("missing");
+  // @ts-expect-error a selected-away numeric key is not aggregatable
+  q.select("name").sum("price");
+}
+
 // -- Query<T> skeleton (DESIGN section 6: query() entry point, terminals) ------
 
 export type QuerySkeletonCases = [

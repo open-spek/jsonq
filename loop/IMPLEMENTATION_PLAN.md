@@ -95,7 +95,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       harmless; result element type `Pick<T, K>`; explain entry. Type tests: `where` on a
       selected-away key must not compile; `select` result type asserted with `Expect<Equal>`.
       (DESIGN §7 select row)
-- [ ] 3.8 Ungrouped aggregates on `Query<T>`: `count`, `sum`, `avg`, `min`, `max`.
+- [x] 3.8 Ungrouped aggregates on `Query<T>`: `count`, `sum`, `avg`, `min`, `max`.
       Test first: aggregates run the pipeline then delegate to ops (1.4); empty-set semantics
       surface through (RangeError propagates); keys constrained to `KeysOfType<T, number>`.
       Type tests: non-number key passed to `sum`/`avg`/`min`/`max` must not compile.
