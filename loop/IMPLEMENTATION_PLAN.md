@@ -30,7 +30,7 @@ and close-out. Every task: failing test first, one commit, `./loop/scripts/gate.
 
 Pure functions, no builder yet. Strictest tests; every semantic decision recorded in PROGRESS.
 
-- [ ] 1.1 `deepEqual(a, b)` — deep structural, type-sensitive equality.
+- [x] 1.1 `deepEqual(a, b)` — deep structural, type-sensitive equality.
       Test first: primitives type-sensitive (`1` vs `"1"` unequal), `null` vs `undefined` vs `0`
       all distinct, objects structural with key order irrelevant, nested objects, arrays
       element-wise and order-sensitive, mixed nesting, empty object/array cases.

@@ -113,3 +113,31 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 1 test passes (was 0; +1) at 100% line + function coverage,
   build OK — `./loop/scripts/gate.sh` exit 0.
 - Next: task 1.1 (`deepEqual` in src/ops.ts, guarded core).
+
+### 2026-07-10 — 1.1 deepEqual: deep structural, type-sensitive equality (DONE)
+
+- Tests first: `src/ops.test.ts`, 27 new cases across six describe groups (type-sensitive
+  primitives; null/undefined/0 distinctness; SameValueZero numbers; structural objects;
+  order-sensitive arrays; mixed nesting and empty containers); watched RED (`error: Cannot
+  find module './ops'`) before implementing.
+- Built `src/ops.ts` (guarded core, first content): `deepEqual(a: unknown, b: unknown)` —
+  fast-path `===`, SameValueZero number branch, array element-wise recursion, object
+  own-enumerable-key recursion with key-count + `Object.hasOwn` checks. ~25 lines.
+- DECISION — number equality is SameValueZero (`NaN` equals `NaN`, `+0` equals `-0`): DESIGN
+  section 7 already locks groupBy to SameValueZero via native Map keys, so this keeps ONE
+  equality notion for values across the engine; it also matches `Array.prototype.includes`
+  and mainstream deep-equal libraries, and avoids `where("x", "==", NaN)` silently never
+  matching. Rejected strict `===` NaN semantics (NaN never equal) because it would split
+  equality between where and groupBy. Distinct from the DESIGN-locked rule that RELATIONAL
+  comparisons involving NaN are false (that lands in task 1.2). Flagged for human review.
+- DECISION — a key explicitly set to `undefined` is structurally present: `{a: undefined}`
+  is NOT equal to `{}` (own-enumerable-key sets are compared, not defined-value sets).
+  Rationale: key sets are part of structure; dropping undefined-valued keys would be a
+  hidden JSON.stringify-style normalization the engine does not perform anywhere else.
+- KNOWN LIMITATION (recorded): non-plain objects (Date, Map, Set, class instances) get no
+  special handling — they compare structurally by own enumerable keys (two Dates compare as
+  empty objects, hence equal regardless of time). Acceptable: rows are JSON values by
+  contract and DESIGN section 8 explicitly rejects Date support.
+- Gate: typecheck OK, lint clean, 28 tests pass (was 1; +27) at 100% line + function
+  coverage (src/index.ts and src/ops.ts both in the coverage table), build OK.
+- Next: task 1.2 (relational comparison for `<`, `<=`, `>`, `>=` in src/ops.ts).
