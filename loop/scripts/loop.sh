@@ -45,6 +45,11 @@ USAGE_WAIT="${LOOP_USAGE_WAIT:-1800}"
 MAX_USAGE_WAITS="${LOOP_MAX_USAGE_WAITS:-48}"
 MAX_TRANSIENT="${LOOP_MAX_TRANSIENT:-5}"
 MODEL="${LOOP_MODEL:-}"
+# Hard cap per iteration. An agent process that hangs (observed: usage limit
+# hit mid-iteration leaves `claude -p` alive but idle forever) never exits,
+# so classify() never runs. timeout(1) turns a hang into exit 124, which
+# classify() treats as transient (backoff + retry the same iteration).
+ITERATION_TIMEOUT="${LOOP_ITERATION_TIMEOUT:-1800}"
 
 mkdir -p "$LOG_DIR" "$(dirname "$COMPLETE_MARKER")"
 rm -f "$COMPLETE_MARKER"
@@ -83,6 +88,13 @@ classify() {
     echo fatal; return
   fi
 
+  # timeout(1) expiry: the agent process hung past ITERATION_TIMEOUT (observed
+  # with usage limits hitting mid-iteration). Retry as transient; if the cause
+  # persists, MAX_TRANSIENT stops the loop for a human.
+  if [[ "$code" -eq 124 ]]; then
+    echo transient; return
+  fi
+
   if [[ "$code" -ne 0 ]]; then
     if grep -qiE "unable to connect to api|api error: 5[0-9][0-9]|overloaded|request timed out|fetch failed|request rejected \(429\)|temporarily limiting requests|econnreset|etimedout|econnrefused" "$log"; then
       echo transient; return
@@ -99,7 +111,8 @@ run_agent() {
   # Default: Claude Code non-interactive
   if [[ "$AGENT_CMD" == "claude" ]]; then
     # shellcheck disable=SC2086
-    claude -p "$prompt_content" \
+    timeout --foreground --kill-after=30 "$ITERATION_TIMEOUT" \
+      claude -p "$prompt_content" \
       ${MODEL:+--model "$MODEL"} \
       $AGENT_ARGS \
       ${DISALLOWED_TOOLS:+--disallowedTools "$DISALLOWED_TOOLS"}

@@ -61,4 +61,5 @@ Do NOT use a workflow to skip the one-task rule or to batch multiple plan checkb
 - 999d. BLOCKED: if the same task fails twice, write the blocker in `loop/PROGRESS.md` and stop — do not fake progress or thrash.
 - 999e. STAY ON SPEC: `docs/DESIGN.md` is frozen. If you believe it is wrong, record the objection in `loop/PROGRESS.md`; do not silently diverge.
 - 999f. Think carefully before non-trivial design decisions in guarded/trust-boundary modules (see DESIGN.md).
+- 999h. NEVER rewrite committed history (no reset/amend/rebase of commits). If a previous iteration committed code but missed the plan tick or PROGRESS note, repair it with a forward-only docs commit.
 - 999g. NEVER pause to ask the human or wait for sign-off — the loop has no interactive human. At a design fork, make the best decision consistent with `docs/DESIGN.md`, record the decision and its reasoning in `loop/PROGRESS.md`, commit, and flag it there for later human review/revert. Decide-record-commit always beats blocking. (Genuine blockers still follow 999d.)
