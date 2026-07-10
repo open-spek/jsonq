@@ -15,7 +15,7 @@ and close-out. Every task: failing test first, one commit, `./loop/scripts/gate.
 
 ## Phase 0 — toolchain and gate
 
-- [ ] 0.1 Scaffold the Bun + TypeScript toolchain so the gate runs green end to end.
+- [x] 0.1 Scaffold the Bun + TypeScript toolchain so the gate runs green end to end.
       Build: `package.json` (scripts exactly per `docs/TOOLCHAIN.md`; devDependencies only:
       typescript, eslint, typescript-eslint; `dependencies` stays empty), `tsconfig.json`
       (strict, `noUncheckedIndexedAccess`, covers all of `src/`), `tsconfig.build.json`

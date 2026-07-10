@@ -79,3 +79,37 @@ Rules (from the reference build's real notebook):
   by the plan both exist.
 - No code written; gate not run (still nothing to gate — package.json is task 0.1).
 - Next: task 0.1 (toolchain scaffold, gate green) via the build loop.
+
+### 2026-07-10 — 0.1 Toolchain scaffold, gate green end to end (DONE)
+
+- Tests first: `src/index.test.ts` (1 seed case) written before any config or source; watched
+  RED twice — gate: `error: Script not found "typecheck"`; bun test: `Cannot find module
+  './index'` — before scaffolding.
+- Built the full Phase 0 scaffold: `package.json` (scripts exactly per docs/TOOLCHAIN.md;
+  `dependencies` explicitly `{}`), `tsconfig.json` (strict, `noUncheckedIndexedAccess`,
+  `verbatimModuleSyntax`, covers all of `src/`), `tsconfig.build.json` (emits `dist/` with
+  `.d.ts`; excludes `src/type-tests.ts` and `src/**/*.test.ts` — verified dist contains only
+  `index.js` + `index.d.ts`), `bunfig.toml` (coverage threshold), ESLint 9 flat config
+  (eslint + typescript-eslint recommended; `no-explicit-any` is an error via recommended),
+  seed `src/index.ts` (one const export, replaced from task 3.1) and empty `src/type-tests.ts`.
+- DECISION — gate honesty probed, not assumed: added a deliberately uncovered function and
+  required the test step to FAIL before trusting the threshold. First attempt passed (bad):
+  Bun 1.3.14 silently ignores the singular `{ line, function }` threshold keys sketched in
+  TOOLCHAIN.md. Enforced syntax is plural `{ lines = 1.0, functions = 1.0 }` — verified
+  exit 1 with the probe, exit 0 at 100% after removing it. Deviation recorded in TOOLCHAIN.md.
+- DECISION — versions pinned `typescript@^5` + `eslint@^9` (resolved 5.9.3 / 9.39.4): a bare
+  install gave typescript@7 + eslint@10, but typescript-eslint@8 (latest) peer-requires TS <6
+  and TOOLCHAIN.md locks "ESLint 9 flat config". Rejected keeping latest majors because the
+  lint stack would run outside its supported peer range. Flagged for human review (upgrading
+  to TS 7 / ESLint 10 is a post-M1 toolchain decision).
+- DECISION — `@types/bun` added to devDependencies (deviation recorded in TOOLCHAIN.md):
+  tsc typechecks `src/**/*.test.ts` (tsconfig covers all of src/), and `bun:test` imports do
+  not resolve without it. Rejected excluding tests from tsconfig — untypechecked tests would
+  weaken the gate.
+- KNOWN LIMITATION (recorded): bun coverage only counts files LOADED by tests — a src/ file
+  never imported by any test silently escapes the 100% threshold. Acceptable now (every
+  Phase 1-3 module gets direct tests); the 4.1 sweep must re-check that all runtime src/
+  files appear in the coverage table.
+- Gate: typecheck OK, lint clean, 1 test passes (was 0; +1) at 100% line + function coverage,
+  build OK — `./loop/scripts/gate.sh` exit 0.
+- Next: task 1.1 (`deepEqual` in src/ops.ts, guarded core).

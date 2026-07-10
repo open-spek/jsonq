@@ -66,6 +66,23 @@ Notes for Phase 0:
 - 100% line + function coverage across all `src/` runtime files.
 - No `any` in `src/` (lint-enforced); `unknown` + narrowing where needed.
 
+## Deviations found during Phase 0 (task 0.1, 2026-07-10)
+
+Recorded per the plan; the decision table above stands, these are corrections met in practice:
+
+1. **`@types/bun` added to devDependencies.** `tsconfig.json` covers all of `src/`, so
+   `tsc --noEmit` typechecks `src/**/*.test.ts`, whose `import ... from "bun:test"` needs
+   Bun's type declarations. Dev-only; runtime dependency count is still zero.
+2. **`coverageThreshold` keys are PLURAL.** The sketch above says
+   `{ line = 1.0, function = 1.0 }`, but Bun 1.3.14 silently ignores singular keys (probe:
+   an uncovered function passed the gate). The enforced syntax is
+   `coverageThreshold = { lines = 1.0, functions = 1.0 }` — verified failing (exit 1) on an
+   uncovered function and passing at 100%.
+3. **Versions pinned to `typescript@^5` and `eslint@^9`.** A bare install resolved
+   typescript@7 and eslint@10; typescript-eslint@8 (latest) declares a TypeScript <6 peer
+   range, and this file locks "ESLint 9 flat config". Installed: typescript 5.9.3,
+   eslint 9.39.4, typescript-eslint 8.63.0, @types/bun 1.3.14 on Bun 1.3.14.
+
 ## Notes for the loop agent
 
 - Do not add tools or dependencies without updating this file and the gate.

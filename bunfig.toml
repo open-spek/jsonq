@@ -1,0 +1,12 @@
+# Test runner configuration (docs/TOOLCHAIN.md).
+# Coverage threshold is the reliability bar from docs/DESIGN.md section 3:
+# 100% line + function coverage across loaded src/ runtime files.
+#
+# NOTE: keys must be PLURAL (lines/functions). Bun 1.3.14 silently ignores
+# the singular forms (line/function) -- verified by probe during task 0.1;
+# deviation from the sketch in docs/TOOLCHAIN.md recorded there.
+
+[test]
+coverage = true
+coverageThreshold = { lines = 1.0, functions = 1.0 }
+coverageSkipTestFiles = true
