@@ -148,8 +148,14 @@ while (( i <= MAX_ITERATIONS )); do
   # pause the loop, sharpen PROMPT.md, resume — the next iteration picks it up.
   PROMPT_CONTENT="$(cat "$PROMPT_FILE")"
 
-  run_agent "$PROMPT_CONTENT" 2>&1 | tee "$LOG"
-  code=${PIPESTATUS[0]}
+  # Write to the log directly instead of piping through tee: a pipe is held
+  # open by ANY surviving child of a killed agent (orphaned tool processes),
+  # which would block the loop long after timeout(1) fired. With a file, the
+  # exit code is available the moment timeout returns. Follow live with
+  # `tail -f` on the log; the iteration's output is echoed once it ends.
+  run_agent "$PROMPT_CONTENT" > "$LOG" 2>&1
+  code=$?
+  cat "$LOG"
 
   case "$(classify "$LOG" "$code")" in
     ok)
