@@ -237,3 +237,47 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 92 tests pass (was 70; +22) at 100% line + function
   coverage, build OK.
 - Next: task 2.1 (type machinery: `src/types.ts` + compile-time test harness).
+
+### 2026-07-10 — 2.1 Type machinery and the compile-time test harness (DONE)
+
+- Tests first: `src/type-tests.ts` populated with 20 positive `Expect<Equal<...>>` assertions
+  (OperatorFor 9, WhereValue 5, KeysOfType 4, SortableKey 2) plus 17 `@ts-expect-error`
+  negatives (relational on boolean/null/object/array/nullable 5, where-value mismatches 3,
+  aggregate keys 4, sortable keys 5) via constraint-probe aliases; watched RED (`TS2307:
+  Cannot find module './types'`, every positive `Type 'false' does not satisfy the constraint
+  'true'`, every directive TS2578-unused) before implementing.
+- Built `src/types.ts`: `OperatorFor<V>`, `WhereValue<V, Op>`, `KeysOfType<T, V>`,
+  `SortableKey<T>`. Operator name unions are imported TYPE-ONLY from ops.ts (one source of
+  truth with the runtime switch). Verified erased at runtime: `dist/types.js` is `export {};`
+  and only `types.d.ts` carries declarations.
+- DECISION — `Expect`/`Equal` live in type-tests.ts, NOT types.ts: they are test scaffolding,
+  and types.ts ships in dist as a d.ts; keeping the harness in the build-excluded test file
+  keeps the shipped surface product-only. All future type tests live in the same file, so
+  locality is free.
+- DECISION — `OperatorFor` is strict and non-distributive (`[V] extends [number | string]`):
+  a `number | null` or optional number field gets only `==`/`!=`/`in` plus the predicate
+  overload; a relational op on such a field would silently filter every null row. Matches the
+  1.3 record ("non-orderable operands are unreachable through the typed API"). Flagged for
+  human review: SQL-minded users may expect `where("rating", ">", 3)` on a nullable column.
+- DECISION — `SortableKey` ALLOWS nullable orderable fields
+  (`NonNullable<T[K]> extends number | string`): DESIGN section 7 pins "null/undefined sort
+  LAST regardless of direction", which is reachable through the typed API only if nullable
+  keys are sortable. A field that can ONLY be null/undefined is rejected via an explicit
+  `[NonNullable<T[K]>] extends [never]` guard — never extends everything, so without the
+  guard an always-null field would count as sortable (pinned by test `SortOnAlwaysNull`).
+  The deliberate asymmetry with strict `OperatorFor` is recorded: sort has pinned null
+  semantics, where-relational does not. Flagged for human review.
+- DECISION — `KeysOfType` is exact-assignable (`[T[K]] extends [V]`, non-distributive):
+  nullable/optional number fields are NOT aggregatable — computeAggregate poisons non-numbers
+  to NaN (1.4), and a compile error beats silent NaN (DESIGN principle 5). The `& string`
+  also strips the `undefined` optional properties leak into the mapped key union.
+- Negative-test honesty probed, not assumed (0.1 precedent): temporarily loosening
+  OperatorFor to the full operator set produced 11 typecheck errors (6 failed positives +
+  5 unused directives); dropping the SortableKey never-guard produced 2. Restored, re-green.
+  An unused `@ts-expect-error` is itself an error (TS2578), so negatives cannot silently rot.
+- KNOWN LIMITATION (recorded): types.ts has no runtime code, so it never appears in the bun
+  coverage table — its only gate is tsc over type-tests.ts. Coverage table unchanged
+  (index.ts, ops.ts at 100%).
+- Gate: typecheck OK, lint clean, 92 tests pass (unchanged — type-level task; its tests run
+  in the typecheck step) at 100% line + function coverage, build OK (dist gains types.d.ts).
+- Next: task 3.1 (`Query<T>` op-list skeleton: src/query.ts + src/index.ts).

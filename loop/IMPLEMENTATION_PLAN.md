@@ -50,7 +50,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
 
 ## Phase 2 — type machinery: `src/types.ts` + type-test harness
 
-- [ ] 2.1 Type machinery and the compile-time test harness.
+- [x] 2.1 Type machinery and the compile-time test harness.
       Build: `Expect<Equal<...>>` helper; `OperatorFor<V>` (relational only on
       `number | string`); the op-dependent where-value type (`in` -> `readonly V[]`, all other
       ops -> `V`); `KeysOfType<T, V>`; `SortableKey<T>`. Test: seed `src/type-tests.ts` with
