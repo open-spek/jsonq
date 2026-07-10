@@ -61,7 +61,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
 
 ## Phase 3 — fluent builder: `src/query.ts` + `src/index.ts`
 
-- [ ] 3.1 `Query<T>` op-list skeleton: `query(source)`, frozen op list, every call returns a
+- [x] 3.1 `Query<T>` op-list skeleton: `query(source)`, frozen op list, every call returns a
       NEW Query, `execute()` with no ops returns a NEW array of the ORIGINAL row references,
       `explain()` returns the (empty) readonly op-description list. Public surface exported
       from `src/index.ts`. Test first: immutability proofs (snapshot source, execute, deep

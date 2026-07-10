@@ -4,6 +4,7 @@
 // construction: a `@ts-expect-error` line that stops erroring is itself a
 // typecheck error ("unused directive"), so a loosened type layer fails here.
 
+import type { OpDescription, Query, query } from "./index";
 import type { KeysOfType, OperatorFor, SortableKey, WhereValue } from "./types";
 
 // -- Test harness -------------------------------------------------------------
@@ -98,6 +99,18 @@ export type AggregateOnNullableNumber = NumericKeyAllows<Product, "rating">;
 export type AggregateOnOptionalNumber = NumericKeyAllows<Product, "discount">;
 // @ts-expect-error an unknown key is not an aggregate key
 export type AggregateOnUnknownKey = NumericKeyAllows<Product, "missing">;
+
+// -- Query<T> skeleton (DESIGN section 6: query() entry point, terminals) ------
+
+export type QuerySkeletonCases = [
+  Expect<Equal<ReturnType<typeof query<Product>>, Query<Product>>>,
+  Expect<Equal<Parameters<typeof query<Product>>[0], readonly Product[]>>,
+  Expect<Equal<ReturnType<Query<Product>["execute"]>, Product[]>>,
+  Expect<Equal<ReturnType<Query<Product>["explain"]>, readonly OpDescription[]>>,
+];
+
+// @ts-expect-error rows must be objects — a primitive element type is not queryable
+export type QueryOverPrimitives = ReturnType<typeof query<number>>;
 
 // -- SortableKey<T> (number | string; nullable allowed, nulls sort last) -------
 

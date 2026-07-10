@@ -281,3 +281,40 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 92 tests pass (unchanged — type-level task; its tests run
   in the typecheck step) at 100% line + function coverage, build OK (dist gains types.d.ts).
 - Next: task 3.1 (`Query<T>` op-list skeleton: src/query.ts + src/index.ts).
+
+### 2026-07-10 — 3.1 Query op-list skeleton: query(), execute(), explain() (DONE)
+
+- Tests first: `src/query.test.ts` (10 new cases across four describe groups: new-array and
+  original-row-reference proofs, fresh-array-per-call, result-mutation isolation, source
+  immutability via structuredClone snapshot, frozen empty explain incl. push-throws, query
+  independence), `src/index.test.ts` seed replaced with a public-surface end-to-end test,
+  4 positive type-test cases + 1 `@ts-expect-error` negative; watched RED (`TS2307: Cannot
+  find module './query'`, `Export named 'query' not found in module 'src/index.ts'`, positives
+  `Type 'false' does not satisfy the constraint 'true'`) before implementing.
+- Built `src/query.ts` (Query class holding source ref + frozen op list, execute() spreads the
+  source into a new array of original row references, explain() returns the frozen list) and
+  replaced the Phase 0 `src/index.ts` placeholder with the real surface (`query` value export,
+  `Query`/`OpDescription` type-only exports). PACKAGE_NAME seed export is gone.
+- DECISION — `OpDescription` starts as `never` (the empty union), not a `{ kind: string }`
+  base shape: DESIGN section 7 promises a union DISCRIMINATED by `kind`, and an open
+  `{ kind: string }` would let explain() typecheck against descriptions that never narrow.
+  Each fluent task (3.2-3.10) adds its member; 3.2 must replace the `never`.
+- DECISION — Query is a class whose constructor is NOT public surface: `src/index.ts`
+  re-exports the class TYPE-ONLY, so consumers can name `Query<T>` but only query() constructs
+  one. Extension mechanism for every later fluent method is `new Query(source, [...ops, op])`
+  inside the module. Rejected an interface + closure factory (harder to grow nine methods on)
+  and a public constructor (two entry points for one job).
+- DECISION — the task's "branching proof" is DEFERRED to 3.2 and a precursor pinned instead:
+  no extending fluent call exists at 3.1, and the 100% function-coverage gate itself forbids
+  shipping an uncalled extension helper, so a genuine shared-prefix branching test is
+  mechanically impossible this task. Pinned now: frozen op list (push throws), fresh array per
+  execute, and two-queries-over-one-source independence. Task 3.2 MUST add the real proof
+  (extend one prefix two ways, both stay independent) — recorded here so it cannot be missed.
+- KNOWN LIMITATION (recorded): explain() returns the internal ops array itself (safe because
+  frozen) — its object identity across calls is NOT pinned by tests, and 3.3's
+  predicate-in-explain decision may force a mapped copy. Callers own nothing they can mutate
+  either way.
+- Gate: typecheck OK, lint clean, 102 tests pass (was 92; +10) at 100% line + function
+  coverage (index.ts, ops.ts, query.ts all in the table), build OK (dist gains query.js/.d.ts).
+- Next: task 3.2 (`where(key, op, value)` — typed operator filtering; includes the deferred
+  branching proof).

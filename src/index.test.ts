@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
-import { PACKAGE_NAME } from "./index";
+import { query } from "./index";
 
-test("toolchain seed: public module loads and exports the package name", () => {
-  expect(PACKAGE_NAME).toBe("jsonq");
+test("public surface: query() builds an executable query end to end", () => {
+  const rows = [{ id: 1 }, { id: 2 }];
+  const q = query(rows);
+  expect(q.execute()).toEqual([{ id: 1 }, { id: 2 }]);
+  expect(q.explain()).toEqual([]);
 });
