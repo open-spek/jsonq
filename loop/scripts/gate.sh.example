@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#
+# Gate script — mechanical definition of "done" for one loop iteration.
+# Copy to loop/scripts/gate.sh, replace each `todo` line with your stack's
+# command, and chmod +x. Referenced from docs/TOOLCHAIN.md and loop/PROMPT.md.
+#
+# Exit 0 only if all checks pass. Any failure stops the script (set -e).
+# Until configured, every step fails loudly ON PURPOSE — a gate must never
+# pass by default.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+
+todo() {
+  echo "gate: NOT CONFIGURED — $1 (edit loop/scripts/gate.sh)" >&2
+  exit 1
+}
+
+echo "=== gate: typecheck ==="
+# e.g.: bun run typecheck / npm run typecheck / make typecheck / mypy .
+todo "set the typecheck command"
+
+echo "=== gate: lint ==="
+# e.g.: bun run lint / npm run lint / ruff check .
+todo "set the lint command"
+
+echo "=== gate: test ==="
+# e.g.: bun test / npm test / pytest / go test ./...
+todo "set the test command"
+
+echo "=== gate: build ==="
+# e.g.: bun run build / npm run build / make build
+todo "set the build command"
+
+echo "=== gate: ALL GREEN ==="

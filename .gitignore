@@ -1,0 +1,21 @@
+# Loop engineering runtime (local only)
+.loop/logs/
+.loop/COMPLETE
+
+# Agent / IDE
+.remember/
+.cursor/
+
+# Dependencies and build (add per stack)
+node_modules/
+dist/
+coverage/
+*.log
+
+# Environment
+.env
+.env.*
+loop/config/loop.env
+
+# OS
+.DS_Store
