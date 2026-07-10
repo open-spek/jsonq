@@ -180,7 +180,9 @@ agg.sum<T>(key: KeysOfType<T, number>): ...;   // likewise avg / min / max
 
 ## 10. Open questions
 
-- [ ] npm publish + package name availability — owner: human, after M1. Not a loop concern.
+- [ ] npm publish + package name availability — owner: human. M1 closed out 2026-07-10 with
+      the full gate green, so the question is now ripe for the human decision. Not a loop
+      concern.
 
 ## 11. References
 

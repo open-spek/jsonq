@@ -843,3 +843,29 @@ Rules (from the reference build's real notebook):
   function coverage, build OK.
 - Next: task F.3 (final close-out: verify every ACCEPTANCE checkbox, update DESIGN section
   10 / HANDOFF, create .loop/COMPLETE, print the sentinel).
+
+### 2026-07-10 — F.3 Final close-out: ACCEPTANCE verified, M1 complete (DONE)
+
+- Verification-only iteration (no runtime code changed): ran the full gate on the clean
+  tree FIRST — typecheck OK, lint clean, 252 tests pass at 100% line + function coverage
+  (index.ts, ops.ts, query.ts all present in the coverage table), build OK.
+- Walked every ACCEPTANCE.md checkbox against the final tree and ticked them in place.
+  Functional and type-level bullets stand on the 4.1 reconciliation anchors, re-spot-checked
+  mechanically this iteration: all six ACCEPTANCE negative cases present as explicit
+  `@ts-expect-error` sites (54 negatives total in type-tests.ts), `dependencies` is `{}`,
+  no stub/TODO markers in src/. Quality stands on the green gate plus the F.2 judge verdict
+  (PASS WITH NOTES, findings applied). Documentation stands on F.1 (examples executed before
+  transcription) plus the DESIGN section 10 and HANDOFF updates in this commit. Process:
+  the plan is fully ticked (F.3 ticked here) and decisions are recorded throughout this log.
+- DESIGN section 10 updated: nothing was RESOLVED — npm publish + package name stays open
+  and human-owned; the line now records that M1 is complete so the question is ripe.
+  HANDOFF.md rewritten to the actual end state (M1 complete; next moves human-owned:
+  publish decision, CI, review of flagged decisions).
+- DECISION — ACCEPTANCE.md checkboxes ticked at close-out: the file is the milestone's
+  definition of done and F.3 is its verification pass; leaving verified criteria unchecked
+  would make the file lie about the state it exists to record. The tick commit and the
+  verification are the same change, so the record cannot drift from the check.
+- Gate: typecheck OK, lint clean, 252 tests pass (unchanged — docs-only) at 100% line +
+  function coverage, build OK.
+- Next: nothing — M1 complete; `.loop/COMPLETE` created after this commit. Human owns npm
+  publish, CI setup, and the pass over PROGRESS entries flagged for human review.

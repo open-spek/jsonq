@@ -6,28 +6,39 @@
 
 ## TL;DR — where we are
 
-Spec is locked (2026-07-10): MANIFESTO.md and docs/DESIGN.md are ratified, toolchain decided
-(docs/TOOLCHAIN.md), M1 acceptance written (loop/ACCEPTANCE.md). Planning mode has generated
-the M1 plan (loop/IMPLEMENTATION_PLAN.md — 18 tasks, 6 phases). NO CODE EXISTS YET — not even
-package.json; plan task 0.1 scaffolds the toolchain. Next: run the build loop on M1.
+M1 is COMPLETE (2026-07-10). The full v1 surface is built, tested, and documented:
+`query` / `where` (operator API + predicate escape hatch) / `sort` (stable, chained
+tie-breakers, nulls last) / `limit` / `select` / `groupBy` / `aggregate` (agg spec) /
+ungrouped aggregates / `execute` / `explain`. Gate green on a clean tree: 252 tests at
+100% line + function coverage, typecheck (including `src/type-tests.ts` with all six
+ACCEPTANCE negative cases) and lint clean, build emits `dist/`. Fresh-context judge
+verdict: PASS WITH NOTES, findings applied (PROGRESS entry F.2). Every ACCEPTANCE.md
+criterion verified and ticked at close-out (F.3); `.loop/COMPLETE` created.
 
 ## Locked context (do not re-litigate)
 
-See `docs/DESIGN.md` and "Deliberately rejected" there.
+See `docs/DESIGN.md` and "Deliberately rejected" there. Semantic decisions made
+autonomously during the build (SameValueZero deep equality, unorderable-operand and
+mixed-type comparison behavior, sort-run composition, select presence semantics,
+spec-wins `key` collision, and more) are recorded with reasoning in `loop/PROGRESS.md`;
+several are explicitly flagged for human review.
 
 ## Open questions
 
-- npm publish + package name — human decision after M1 (DESIGN.md section 10)
+- npm publish + package name — human decision, now ripe (DESIGN.md section 10)
+- CI setup — human decision post-M1 (local gate only today)
+- PROGRESS entries tagged "flagged for human review" await a human pass
 
 ## Immediate next step
 
-Build mode: LOOP_PROMPT_FILE is set to loop/PROMPT.md in loop/config/loop.env. Run
-`./loop/scripts/loop.sh`; the loop works loop/IMPLEMENTATION_PLAN.md top-down starting at
-task 0.1 (toolchain scaffold, gate green).
+None for the loop — M1 was the whole v1 scope. Next moves are human-owned: review the
+flagged PROGRESS decisions, decide npm publish / package name, and reset a new milestone
+if more scope is wanted.
 
 ## Pointers
 
 - Spec: `docs/DESIGN.md`
-- Plan: `loop/IMPLEMENTATION_PLAN.md`
-- Acceptance: `loop/ACCEPTANCE.md`
-- Run loop: `./loop/scripts/loop.sh`
+- Plan (all ticked): `loop/IMPLEMENTATION_PLAN.md`
+- Acceptance (all verified): `loop/ACCEPTANCE.md`
+- Decision log: `loop/PROGRESS.md`
+- Usage docs: `README.md`; guided tour: `docs/ARCHITECTURE.md`

@@ -132,7 +132,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       for the "readable in one sitting" bar; record verdict AND applied findings in
       `loop/PROGRESS.md`; apply accepted findings with the gate green. (ACCEPTANCE quality;
       DESIGN §9 subjective bar)
-- [ ] F.3 Final close-out: verify every ACCEPTANCE.md checkbox against code/tests on a clean
+- [x] F.3 Final close-out: verify every ACCEPTANCE.md checkbox against code/tests on a clean
       tree with a green gate; update `docs/DESIGN.md` §10 open questions (npm publish stays
       human-owned), `loop/PROGRESS.md`, `loop/HANDOFF.md`; create `.loop/COMPLETE`; print
       `JSONQ-M1-DONE`. (ACCEPTANCE completion signal)
