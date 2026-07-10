@@ -40,7 +40,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       Test first: JS relational semantics for numbers and strings; every comparison involving
       NaN is `false`; mixed-direction cases. DECISION to pin: string comparison is plain JS
       code-unit order (no locale) — record it. (DESIGN §6 operator table, relational row)
-- [ ] 1.3 `evaluateWhere(rowValue, op, value)` — one entry point for all 7 operators.
+- [x] 1.3 `evaluateWhere(rowValue, op, value)` — one entry point for all 7 operators.
       Test first: table-driven cases per DESIGN §6 — `==`/`!=` via deepEqual, relational via
       1.2, `in` membership via deepEqual over a readonly array. (DESIGN §6 complete operator set)
 - [ ] 1.4 Aggregate computations: `count`, `sum`, `avg`, `min`, `max` over rows + numeric key.

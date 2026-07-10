@@ -63,3 +63,33 @@ export function compareRelational(
       return a >= b;
   }
 }
+
+export type WhereOperator = "==" | "!=" | RelationalOperator | "in";
+
+function isOrderable(value: unknown): value is number | string {
+  return typeof value === "number" || typeof value === "string";
+}
+
+// Single runtime entry point for all 7 where operators (DESIGN section 6):
+// == and != are deep type-sensitive equality, in is membership via the same
+// deep equality over a readonly array, and the relational operators delegate
+// to compareRelational. Operands the type layer would reject (relational on
+// a non-orderable value, in on a non-array) evaluate false rather than
+// throwing: DESIGN section 7 locks the runtime error set to the limit
+// TypeError and the empty-set RangeError, so type-invalid data filters rows
+// out instead of crashing the pipeline.
+export function evaluateWhere(rowValue: unknown, op: WhereOperator, value: unknown): boolean {
+  switch (op) {
+    case "==":
+      return deepEqual(rowValue, value);
+    case "!=":
+      return !deepEqual(rowValue, value);
+    case "in":
+      return Array.isArray(value) && value.some((member: unknown) => deepEqual(rowValue, member));
+    case "<":
+    case "<=":
+    case ">":
+    case ">=":
+      return isOrderable(rowValue) && isOrderable(value) && compareRelational(rowValue, op, value);
+  }
+}

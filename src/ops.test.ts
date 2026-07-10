@@ -4,9 +4,12 @@
 // recorded in loop/PROGRESS.md, task 1.1). compareRelational pins the
 // <, <=, >, >= semantics: JS relational order per type, NaN comparisons
 // false, strings by code-unit order, mixed number/string unordered
-// (decisions recorded in loop/PROGRESS.md, task 1.2).
+// (decisions recorded in loop/PROGRESS.md, task 1.2). evaluateWhere pins
+// the single entry point for all 7 operators, including the false-not-throw
+// convention for type-invalid operands (decisions recorded in
+// loop/PROGRESS.md, task 1.3).
 import { describe, expect, test } from "bun:test";
-import { compareRelational, deepEqual } from "./ops";
+import { compareRelational, deepEqual, evaluateWhere, type WhereOperator } from "./ops";
 
 describe("deepEqual: primitives are type-sensitive", () => {
   test("equal primitives of the same type", () => {
@@ -255,5 +258,112 @@ describe("compareRelational: mixed number/string operands are unordered (pinned 
       expect(compareRelational(5, op, "abc")).toBe(false);
       expect(compareRelational("abc", op, 5)).toBe(false);
     }
+  });
+});
+
+describe("evaluateWhere: table-driven sweep over all 7 operators (DESIGN section 6)", () => {
+  const CASES: ReadonlyArray<{
+    name: string;
+    row: unknown;
+    op: WhereOperator;
+    value: unknown;
+    expected: boolean;
+  }> = [
+    // == / != delegate to deepEqual (deep, structural, type-sensitive)
+    { name: "== matches an equal primitive", row: 1, op: "==", value: 1, expected: true },
+    { name: "== rejects coercion: 1 vs \"1\"", row: 1, op: "==", value: "1", expected: false },
+    {
+      name: "== compares objects structurally, key order irrelevant",
+      row: { a: 1, b: 2 },
+      op: "==",
+      value: { b: 2, a: 1 },
+      expected: true,
+    },
+    {
+      name: "== compares arrays order-sensitively",
+      row: [1, 2],
+      op: "==",
+      value: [2, 1],
+      expected: false,
+    },
+    { name: "== treats NaN as equal to NaN (SameValueZero)", row: NaN, op: "==", value: NaN, expected: true },
+    { name: "!= negates deep equality for unequal values", row: 1, op: "!=", value: "1", expected: true },
+    { name: "!= negates deep equality for equal values", row: 1, op: "!=", value: 1, expected: false },
+    {
+      name: "!= sees structurally different objects as unequal",
+      row: { a: 1 },
+      op: "!=",
+      value: { a: 2 },
+      expected: true,
+    },
+    { name: "!= treats NaN as equal to NaN (SameValueZero)", row: NaN, op: "!=", value: NaN, expected: false },
+    // relational operators delegate to compareRelational
+    { name: "< orders numbers", row: 1, op: "<", value: 2, expected: true },
+    { name: "< orders strings by code-unit", row: "Z", op: "<", value: "a", expected: true },
+    { name: "< involving NaN is false", row: NaN, op: "<", value: 1, expected: false },
+    { name: "<= holds for equal numbers", row: 5, op: "<=", value: 5, expected: true },
+    { name: "> orders numbers", row: 2, op: ">", value: 1, expected: true },
+    { name: "> on mixed number/string is unordered", row: "5", op: ">", value: 10, expected: false },
+    { name: ">= holds for equal numbers", row: 5, op: ">=", value: 5, expected: true },
+    { name: ">= fails for a smaller left operand", row: 5, op: ">=", value: 6, expected: false },
+    // in: membership via the same deep equality over a readonly array
+    { name: "in finds a member primitive", row: 2, op: "in", value: [1, 2, 3], expected: true },
+    { name: "in misses an absent primitive", row: 4, op: "in", value: [1, 2, 3], expected: false },
+    { name: "in is type-sensitive: \"1\" not in [1, 2, 3]", row: "1", op: "in", value: [1, 2, 3], expected: false },
+    {
+      name: "in matches objects by deep equality, not reference",
+      row: { a: 1 },
+      op: "in",
+      value: [{ a: 2 }, { a: 1 }],
+      expected: true,
+    },
+    { name: "in finds NaN (SameValueZero)", row: NaN, op: "in", value: [NaN], expected: true },
+    { name: "in over an empty array is false", row: 1, op: "in", value: [], expected: false },
+    { name: "in matches null by identity", row: null, op: "in", value: [null], expected: true },
+  ];
+
+  for (const { name, row, op, value, expected } of CASES) {
+    test(name, () => {
+      expect(evaluateWhere(row, op, value)).toBe(expected);
+    });
+  }
+});
+
+describe("evaluateWhere: relational ops on non-orderable operands are false (pinned decision)", () => {
+  const NON_ORDERABLE = [null, undefined, true, { n: 1 }, [1]] as const;
+
+  test("a non-orderable row value fails every relational operator", () => {
+    for (const op of RELATIONAL_OPS) {
+      for (const row of NON_ORDERABLE) {
+        expect(evaluateWhere(row, op, 1)).toBe(false);
+      }
+    }
+  });
+
+  test("a non-orderable comparison value fails every relational operator", () => {
+    for (const op of RELATIONAL_OPS) {
+      for (const value of NON_ORDERABLE) {
+        expect(evaluateWhere(1, op, value)).toBe(false);
+      }
+    }
+  });
+
+  test("non-orderable on both sides is still false, even for identical values", () => {
+    expect(evaluateWhere(null, "<=", null)).toBe(false);
+    expect(evaluateWhere(true, ">=", true)).toBe(false);
+  });
+});
+
+describe("evaluateWhere: in with a non-array value is false, not a throw (pinned decision)", () => {
+  test("non-array membership pools never match and never throw", () => {
+    expect(evaluateWhere(1, "in", 1)).toBe(false);
+    expect(evaluateWhere("a", "in", "abc")).toBe(false);
+    expect(evaluateWhere(1, "in", null)).toBe(false);
+    expect(evaluateWhere(1, "in", { 0: 1, length: 1 })).toBe(false);
+  });
+
+  test("a readonly array literal works as the membership pool", () => {
+    const pool = [1, 2, 3] as const;
+    expect(evaluateWhere(2, "in", pool)).toBe(true);
   });
 });

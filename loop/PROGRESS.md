@@ -170,3 +170,34 @@ Rules (from the reference build's real notebook):
   function coverage, build OK.
 - Next: task 1.3 (`evaluateWhere(rowValue, op, value)` — one entry point for all
   7 operators).
+
+### 2026-07-10 — 1.3 evaluateWhere: one entry point for all 7 operators (DONE)
+
+- Tests first: `src/ops.test.ts`, 29 new tests across four describe groups (24-case
+  table-driven sweep covering every operator; non-orderable relational operands;
+  non-array `in` pools; readonly-array pool); watched RED (`SyntaxError: Export named
+  'evaluateWhere' not found in module 'src/ops.ts'`) before implementing.
+- Built `evaluateWhere(rowValue, op, value)` plus the `WhereOperator` type and an
+  `isOrderable` guard in `src/ops.ts` (guarded core): exhaustive switch — `==`/`!=`
+  via deepEqual, `in` via `Array.isArray` + `some(deepEqual)`, relational ops narrow
+  both operands then delegate to compareRelational. No `default` case, so a future
+  operator added to the union without a switch arm fails typecheck. ~20 lines.
+- DECISION — relational ops on non-orderable operands (null/undefined/boolean/
+  object/array, on either side) evaluate FALSE, never throw: DESIGN section 7 locks
+  the runtime error set to the limit TypeError and the empty-set RangeError, and
+  SQL's three-valued logic filters rows on unknown comparisons the same way. These
+  operands are unreachable through the typed API (`OperatorFor` in task 2.1 allows
+  relational only on `number | string`), so this only bites data that lies about its
+  static type. Rejected throwing (breaks the locked error set) and coercion
+  (contradicts the engine's type-sensitive stance). Flagged for human review.
+- DECISION — `in` with a non-array pool evaluates FALSE, never throws: same locked
+  error-set reasoning; the typed API pins the value to `readonly T[K][]` so a
+  non-array pool is only reachable by lying to the type layer. An array-like object
+  (`{ 0: 1, length: 1 }`) is also false — membership requires a real array.
+- Delegation is tested, not assumed: the sweep re-proves type-sensitivity
+  (`"1" not in [1,2,3]`), deep structural membership (object matched by structure,
+  not reference), SameValueZero (`NaN in [NaN]`), and code-unit string order through
+  the evaluateWhere entry point.
+- Gate: typecheck OK, lint clean, 70 tests pass (was 41; +29) at 100% line +
+  function coverage, build OK.
+- Next: task 1.4 (aggregate computations: `count`, `sum`, `avg`, `min`, `max`).
