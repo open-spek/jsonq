@@ -805,3 +805,41 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 252 tests pass (unchanged — docs-only) at 100% line +
   function coverage, build OK.
 - Next: task F.2 (fresh-context judge pass over src/ for the readable-in-one-sitting bar).
+
+### 2026-07-10 — F.2 Fresh-context judge pass over src/ (DONE)
+
+- Judge run first (the verification analogue of tests-first): dispatched the fresh-context
+  judge agent (.claude/agents/judge.md) over the four shipped modules ONLY (index.ts,
+  types.ts, ops.ts, query.ts; tests and docs explicitly excluded — the criterion is whether
+  the shipped source stands alone). The judge's reconstruction section proved a genuine cold
+  read: it independently re-derived the op-list mechanism, sort-run composition,
+  stage-change groupBy, terminal aggregates, the two-error runtime surface, and every
+  non-error hazard (NaN poisoning, relational-null filtering vs nulls-last, reference-keyed
+  groups, shallow immutability) from source alone.
+- VERDICT — PASS WITH NOTES: zero HIGH, one MEDIUM, five LOW. No stubs or dead code found;
+  all exported ops.ts helpers confirmed consumed by query.ts.
+- MEDIUM (applied) — query.ts #extend comment overclaimed that a description handed out by
+  explain() "cannot be edited to alter the pipeline" and deferred the truth to a non-shipped
+  PROGRESS note: freeze is shallow and keyed where descriptions hold values by REFERENCE, so
+  mutating an `in` pool array obtained from explain() genuinely changes later execute()
+  results (the 3.2 known limitation). Comment rewritten to state the caveat inline; the
+  PROGRESS pointer removed. Prose contradicting code in shipped source is exactly what the
+  judge exists to catch.
+- LOW (applied, 3) — stale build-process narration removed from shipped comments: query.ts
+  header "methods land one per task (3.2-3.10)" rewritten as a plain statement; the "1.4
+  convention" numeral dropped from the #aggregate comment (the convention itself was already
+  stated); ops.ts compareForSort comment fixed twice — the misleading "-0" parenthetical
+  dropped (comparators treat -0 as 0; the real historical concern was Object.is-based test
+  matchers, a build detail irrelevant to readers) and "numbers before strings" qualified
+  with "in asc (reversed in desc)" so the bucketing claim is no longer unconditional.
+- LOW (declined, with reason) — removing/reducing the pervasive "DESIGN section N"
+  citations: they are this project's deliberate decision-record idiom, ARCHITECTURE.md ships
+  the map to them, and the judge itself confirmed every rule is restated inline (the MEDIUM
+  was the single case where a citation was the sole carrier — now fixed). Removing them
+  would trade provenance for nothing.
+- All changes are comment-only: no runtime behavior, type, or test changed; no test was
+  added or weakened (nothing testable moved).
+- Gate: typecheck OK, lint clean, 252 tests pass (unchanged — comment-only) at 100% line +
+  function coverage, build OK.
+- Next: task F.3 (final close-out: verify every ACCEPTANCE checkbox, update DESIGN section
+  10 / HANDOFF, create .loop/COMPLETE, print the sentinel).

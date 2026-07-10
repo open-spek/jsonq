@@ -1,8 +1,8 @@
 // Fluent builder (DESIGN section 5): a Query<T> is a reference to the source
 // array plus a FROZEN list of pending ops. Every fluent call returns a NEW
 // Query with one op appended (the receiver is never touched), and execute()
-// interprets the list once, in call order. The fluent methods land one per
-// task (3.2-3.10), each adding its op kind to the unions below.
+// interprets the list once, in call order. Each fluent method contributes
+// one op kind to the unions below.
 
 import { compareForSort, computeAggregate, evaluateWhere } from "./ops";
 import type { AggregateKind, SortDirection, WhereOperator } from "./ops";
@@ -181,8 +181,11 @@ export class Query<T extends object> {
   }
 
   // Appends one op to a frozen copy of the list. The op object is frozen
-  // too, so a keyed description handed out by explain() cannot be edited to
-  // alter the pipeline (freeze is shallow — see the 3.2 PROGRESS note).
+  // too, but only shallowly: its fields cannot be reassigned through a
+  // description handed out by explain(), while a where value that is itself
+  // an array or object is held by REFERENCE and stays caller-mutable — the
+  // engine never deep-copies values, so mutating such a value changes what
+  // later execute() calls filter on.
   #extend(op: PipelineOp<T>): Query<T> {
     return new Query(this.#source, Object.freeze([...this.#ops, Object.freeze(op)]));
   }
@@ -291,7 +294,7 @@ export class Query<T extends object> {
   }
 
   // Extracts the keyed field value from every pipeline row, then hands the
-  // numeric semantics to the guarded core (1.4 convention: ops.ts receives
+  // numeric semantics to the guarded core (convention: ops.ts receives
   // extracted values, never rows or keys to read on its own).
   #aggregate(kind: Exclude<AggregateKind, "count">, key: string): number {
     const values = this.execute().map((row) => (row as Record<string, unknown>)[key]);

@@ -114,10 +114,11 @@ function sortRank(value: unknown): 0 | 1 | 2 {
 // Three-way sort comparator backing sort(key, direction). Same-rank
 // unorderable values compare 0, so the stable sort keeps their pipeline
 // order. Among orderable values desc is the EXACT reverse of asc, computed
-// by swapping the operands (negating the result would turn 0 into -0);
-// mixed number/string pairs — reachable through a number | string union
-// field — bucket numbers before strings, then native JS order per type
-// (numeric; code-unit for strings, matching compareRelational).
+// by swapping the operands; mixed number/string pairs — reachable through
+// a number | string union field — bucket numbers before strings in asc
+// (reversed in desc, like every orderable comparison), then native JS
+// order per type (numeric; code-unit for strings, matching
+// compareRelational).
 export function compareForSort(a: unknown, b: unknown, direction: SortDirection): number {
   const rankA = sortRank(a);
   const rankB = sortRank(b);

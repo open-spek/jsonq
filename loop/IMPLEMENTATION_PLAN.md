@@ -128,7 +128,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       explain; document the no-deep-copy result semantics and the groupBy reference-key
       limitation. ARCHITECTURE.md: one-page tour of the four modules and the trust boundary.
       (ACCEPTANCE documentation section)
-- [ ] F.2 Fresh-context judge pass: run the judge agent (`.claude/agents/judge.md`) over `src/`
+- [x] F.2 Fresh-context judge pass: run the judge agent (`.claude/agents/judge.md`) over `src/`
       for the "readable in one sitting" bar; record verdict AND applied findings in
       `loop/PROGRESS.md`; apply accepted findings with the gate green. (ACCEPTANCE quality;
       DESIGN §9 subjective bar)
