@@ -65,6 +65,6 @@ For fan-out inside a single plan task (audit N files, parallel analysis), you ma
 ## Related repositories
 
 Standalone project. The loop-engineering template it dogfoods lives at
-`~/projects/open-spek/loop (github.com/open-spek/loop)`; template frictions found while building jsonq
+`~/projects/open-spek/loop` ([open-spek/loop](https://github.com/open-spek/loop)); template frictions found while building jsonq
 are recorded by the human observer in `loop/TEMPLATE-FEEDBACK.md` (the loop agent does not
 edit that file).

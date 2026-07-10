@@ -189,5 +189,5 @@ agg.sum<T>(key: KeysOfType<T, number>): ...;   // likewise avg / min / max
 
 - LibreDB (`~/projects/libredb/libredb-database`) — the reference loop-engineered build; its
   deep-equality and honest-omission decisions are deliberately echoed here.
-- Loop-engineering template (`~/projects/open-spek/loop (github.com/open-spek/loop)`) — the machinery
+- Loop-engineering template (`~/projects/open-spek/loop`, github.com/open-spek/loop) — the machinery
   this project dogfoods.
