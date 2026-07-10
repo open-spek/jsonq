@@ -308,6 +308,132 @@ describe("explain() with a predicate where (task 3.3)", () => {
   });
 });
 
+describe("limit(n): call-time validation (task 3.4)", () => {
+  test("a negative n throws TypeError at CALL time, not at execute", () => {
+    const q = query(makeUsers());
+    expect(() => q.limit(-1)).toThrow(TypeError);
+    expect(() => q.limit(-1)).toThrow("limit(-1) requires a non-negative integer");
+  });
+
+  test("a non-integer n throws TypeError at CALL time", () => {
+    const q = query(makeUsers());
+    expect(() => q.limit(1.5)).toThrow(TypeError);
+    expect(() => q.limit(1.5)).toThrow("limit(1.5) requires a non-negative integer");
+  });
+
+  test("NaN and Infinity are non-integers and throw TypeError", () => {
+    const q = query(makeUsers());
+    expect(() => q.limit(Number.NaN)).toThrow(TypeError);
+    expect(() => q.limit(Number.POSITIVE_INFINITY)).toThrow(TypeError);
+  });
+
+  test("a throwing limit() call leaves the receiver untouched", () => {
+    const q = query(makeUsers()).where("id", ">", 0);
+    expect(() => q.limit(-1)).toThrow(TypeError);
+    expect(q.explain()).toHaveLength(1);
+    expect(q.execute()).toEqual(makeUsers());
+  });
+});
+
+describe("limit(n): truncation at its pipeline position (task 3.4)", () => {
+  test("limit(0) yields an empty result", () => {
+    expect(query(makeUsers()).limit(0).execute()).toEqual([]);
+  });
+
+  test("keeps the first n rows, as ORIGINAL row references", () => {
+    const users = makeUsers();
+    const result = query(users).limit(2).execute();
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(users[0]);
+    expect(result[1]).toBe(users[1]);
+  });
+
+  test("an n beyond the row count keeps every row", () => {
+    expect(query(makeUsers()).limit(99).execute()).toEqual(makeUsers());
+  });
+
+  test("limit(k).where(...) truncates FIRST, filters second (call order)", () => {
+    // Truncating [1, 2, 3] to its first two rows leaves only id 2 able to
+    // match id > 1; filtering first would have kept both 2 and 3.
+    const ids = query(makeUsers())
+      .limit(2)
+      .where("id", ">", 1)
+      .execute()
+      .map((user) => user.id);
+    expect(ids).toEqual([2]);
+  });
+
+  test("where(...).limit(k) filters first, truncates second", () => {
+    const ids = query(makeUsers())
+      .where("id", ">", 1)
+      .limit(1)
+      .execute()
+      .map((user) => user.id);
+    expect(ids).toEqual([2]);
+  });
+
+  test("chained limits each apply at their own position", () => {
+    const ids = query(makeUsers())
+      .limit(2)
+      .limit(1)
+      .execute()
+      .map((user) => user.id);
+    expect(ids).toEqual([1]);
+  });
+
+  test("truncation never mutates the source array or its rows", () => {
+    const users = makeUsers();
+    const snapshot = structuredClone(users);
+    query(users).limit(1).execute();
+    expect(users).toEqual(snapshot);
+  });
+
+  test("branching: limit extensions of a shared prefix stay independent", () => {
+    const prefix = query(makeUsers()).where("id", ">", 1);
+    const one = prefix.limit(1);
+    const all = prefix.limit(99);
+    expect(one.execute().map((user) => user.id)).toEqual([2]);
+    expect(all.execute().map((user) => user.id)).toEqual([2, 3]);
+    expect(prefix.explain()).toHaveLength(1);
+  });
+});
+
+describe("explain() with limit ops: call order across mixed pipelines (task 3.4)", () => {
+  test("each limit call adds one { kind: 'limit', count } description", () => {
+    const plan = query(makeUsers()).limit(2).explain();
+    expect(plan).toEqual([{ kind: "limit", count: 2 }]);
+  });
+
+  test("a mixed pipeline lists ops in exactly call order", () => {
+    const plan = query(makeUsers())
+      .where("id", ">", 0)
+      .limit(2)
+      .where((user) => user.id > 1)
+      .limit(1)
+      .explain();
+    expect(plan).toEqual([
+      { kind: "where", key: "id", op: ">", value: 0 },
+      { kind: "limit", count: 2 },
+      { kind: "where", predicate: true },
+      { kind: "limit", count: 1 },
+    ]);
+  });
+
+  test("limit descriptions survive a JSON round-trip", () => {
+    const plan = query(makeUsers()).limit(3).where("name", "==", "ada").explain();
+    expect(JSON.parse(JSON.stringify(plan))).toEqual([
+      { kind: "limit", count: 3 },
+      { kind: "where", key: "name", op: "==", value: "ada" },
+    ]);
+  });
+
+  test("the plan and its limit description are frozen", () => {
+    const plan = query(makeUsers()).limit(1).explain();
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan[0])).toBe(true);
+  });
+});
+
 describe("branching: extensions of a shared prefix are independent (deferred 3.1 proof)", () => {
   test("where() returns a new query and leaves the receiver untouched", () => {
     const base = query(makeUsers());

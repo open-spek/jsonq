@@ -76,7 +76,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       Test first: runtime filtering; overload resolution alongside 3.2 stays intact.
       DECISION to pin: how a predicate op is described in `explain()` while staying
       serializable (e.g. `{ kind: "where", predicate: true }`) — record it. (DESIGN §6)
-- [ ] 3.4 `limit(n)` + pipeline call-order pin.
+- [x] 3.4 `limit(n)` + pipeline call-order pin.
       Test first: `TypeError` at CALL time for negative and non-integer n; `limit(0)` -> empty;
       limit applies at its pipeline position — `limit(k).where(...)` truncates FIRST, filters
       second; `explain()` lists ops in exactly call order across mixed pipelines.

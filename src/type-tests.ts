@@ -163,6 +163,26 @@ export function wherePredicateCallSites(q: Query<Product>): void {
   q.where((row: { other: string }) => row.other === "x");
 }
 
+// -- limit(n) API surface (task 3.4) --------------------------------------------
+// The n validation is a runtime concern (call-time TypeError); the type layer
+// only pins the signature: exactly one number in, the same Query<T> out.
+
+export type LimitApiCases = [
+  Expect<Equal<Parameters<Query<Product>["limit"]>, [n: number]>>,
+  Expect<Equal<ReturnType<Query<Product>["limit"]>, Query<Product>>>,
+];
+
+export function limitCallSites(q: Query<Product>): void {
+  // Positive call sites: any number is accepted by the TYPE layer.
+  q.limit(0);
+  q.limit(10);
+
+  // @ts-expect-error limit takes a number, not a numeric string
+  q.limit("3");
+  // @ts-expect-error limit requires an argument
+  q.limit();
+}
+
 // -- Query<T> skeleton (DESIGN section 6: query() entry point, terminals) ------
 
 export type QuerySkeletonCases = [

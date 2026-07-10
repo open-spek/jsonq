@@ -26,14 +26,20 @@ type WherePredicateDescription = {
   readonly predicate: true;
 };
 
-export type OpDescription = WhereDescription | WherePredicateDescription;
+type LimitDescription = {
+  readonly kind: "limit";
+  readonly count: number;
+};
+
+export type OpDescription = WhereDescription | WherePredicateDescription | LimitDescription;
 
 // The internal pipeline op: identical to its public description for data
 // ops, but a predicate where carries the actual function, which execute()
 // needs and explain() must never hand out.
 type PipelineOp<T> =
   | WhereDescription
-  | { readonly kind: "where"; readonly predicate: (row: T) => boolean };
+  | { readonly kind: "where"; readonly predicate: (row: T) => boolean }
+  | LimitDescription;
 
 // The shared tail every fresh query starts from; typed never[] so one frozen
 // constant serves every row type.
@@ -59,6 +65,8 @@ function applyOp<T extends object>(rows: T[], op: PipelineOp<T>): T[] {
         : rows.filter((row) =>
             evaluateWhere((row as Record<string, unknown>)[op.key], op.op, op.value),
           );
+    case "limit":
+      return rows.slice(0, op.count);
   }
 }
 
@@ -110,6 +118,18 @@ export class Query<T extends object> {
     }
     const [key, op, value] = args;
     return this.#extend({ kind: "where", key, op, value });
+  }
+
+  // Keeps the first n rows at this pipeline position (DESIGN section 7 limit
+  // row): limit(k).where(...) truncates first and filters second. A negative
+  // or non-integer n is a bug at the CALL site, so it throws here — fail
+  // fast, not at execute. This TypeError and the empty-set RangeError are
+  // the engine's only runtime errors (DESIGN section 7 runtime-errors row).
+  limit(n: number): Query<T> {
+    if (!Number.isInteger(n) || n < 0) {
+      throw new TypeError(`limit(${String(n)}) requires a non-negative integer`);
+    }
+    return this.#extend({ kind: "limit", count: n });
   }
 
   // Runs the pipeline over the source, one op at a time, in call order

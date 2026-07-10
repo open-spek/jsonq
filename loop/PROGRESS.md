@@ -396,3 +396,38 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 129 tests pass (was 117; +12) at 100% line + function
   coverage, build OK.
 - Next: task 3.4 (`limit(n)` + pipeline call-order pin).
+
+### 2026-07-10 — 3.4 limit(n) + pipeline call-order pin (DONE)
+
+- Tests first: `src/query.test.ts` 16 new cases across three describe groups (call-time
+  validation incl. exact TypeError messages and receiver-untouched-after-throw; truncation
+  semantics incl. limit(0) -> empty, original-reference proof, n beyond row count, the
+  truncate-first vs filter-first discriminating pair, chained limits, source snapshot,
+  branching; explain call order across a four-op mixed pipeline incl. JSON round-trip and
+  frozen descriptions), `src/index.test.ts` e2e gains a limit call, `src/type-tests.ts`
+  gains 2 `Expect<Equal>` API positives + 2 `@ts-expect-error` negatives; watched RED
+  (`TS2339: Property 'limit' does not exist on type 'Query<User>'`; bun: 15 fail,
+  `limit is not a function`) before implementing.
+- Built `limit(n)` on Query: a call-time guard that throws BEFORE `#extend` (so a throwing
+  call provably leaves the receiver untouched), the `{ kind: "limit", count }` member added
+  to both `OpDescription` and `PipelineOp`, and a `rows.slice(0, op.count)` arm in the
+  exhaustive applyOp switch. ~10 lines.
+- DECISION — description field is `count`, not `n` (`{ kind: "limit", count: 3 }`): DESIGN
+  pins only that descriptions are discriminated by `kind` and serializable; `count` is
+  self-describing in a serialized plan where a bare `n` is not. Pinned by toEqual and
+  JSON-round-trip tests, so the shape is now API surface.
+- DECISION — TypeError message pinned EXACTLY as `limit(-1) requires a non-negative integer`
+  (offending value interpolated, incl. `limit(NaN)`/`limit(Infinity)` via the same guard):
+  follows the 1.4 precedent that runtime-error messages are API surface; tests assert the
+  full message so drift is loud.
+- DECISION — validation is the single guard `!Number.isInteger(n) || n < 0`:
+  `Number.isInteger` rejects NaN, both infinities, and fractions in one coercion-free
+  check. Consequence recorded: `limit(-0)` is accepted (an integer, not `< 0`) and behaves
+  as `limit(0)` through slice — an IEEE-754 edge not worth a special case.
+- Negative honesty probed, not assumed (0.1/2.1/3.2/3.3 precedent): both new negatives
+  re-run without directives in a scratch file — `limit("3")` fails TS2345 (string not
+  assignable to number), `limit()` fails TS2554 (expected 1 argument). Scratch removed
+  before commit.
+- Gate: typecheck OK, lint clean, 145 tests pass (was 129; +16) at 100% line + function
+  coverage, build OK.
+- Next: task 3.5 (`sort(key, direction?)` — single-key ordering).
