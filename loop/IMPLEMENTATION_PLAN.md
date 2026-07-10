@@ -90,7 +90,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       composition mechanics (collapse consecutive sort ops into one comparator vs other
       strategies) AND the behavior of non-adjacent sorts (`sort(a).where(...).sort(b)`) —
       record both with reasoning. (DESIGN §7 sort row)
-- [ ] 3.7 `select(...keys)` — projection.
+- [x] 3.7 `select(...keys)` — projection.
       Test first: rows projected to NEW objects with exactly the named keys; duplicate key
       harmless; result element type `Pick<T, K>`; explain entry. Type tests: `where` on a
       selected-away key must not compile; `select` result type asserted with `Expect<Equal>`.

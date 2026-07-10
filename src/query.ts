@@ -37,11 +37,17 @@ type LimitDescription = {
   readonly count: number;
 };
 
+type SelectDescription = {
+  readonly kind: "select";
+  readonly keys: readonly string[];
+};
+
 export type OpDescription =
   | WhereDescription
   | WherePredicateDescription
   | SortDescription
-  | LimitDescription;
+  | LimitDescription
+  | SelectDescription;
 
 // The internal pipeline op: identical to its public description for data
 // ops, but a predicate where carries the actual function, which execute()
@@ -50,7 +56,8 @@ type PipelineOp<T> =
   | WhereDescription
   | { readonly kind: "where"; readonly predicate: (row: T) => boolean }
   | SortDescription
-  | LimitDescription;
+  | LimitDescription
+  | SelectDescription;
 
 // The shared tail every fresh query starts from; typed never[] so one frozen
 // constant serves every row type.
@@ -67,7 +74,12 @@ const PREDICATE_DESCRIPTION: WherePredicateDescription = Object.freeze({
 // descriptions store stringly keys (they must stay serializable), so the row
 // is re-read as an unknown field value at the guarded-core boundary. A
 // predicate is invoked with the row ALONE — Array.filter's index and array
-// stay internal, honoring the (row: T) => boolean contract.
+// stay internal, honoring the (row: T) => boolean contract. A select maps
+// each row to a new object carrying only the named keys the row actually
+// HAS (absence is data, preserved as such); field values copy by reference,
+// never deeply. After a select the pipeline rows are no longer T-shaped —
+// the cast at the end of that arm is where the row-type change happens at
+// runtime, mirroring the Query<Pick<T, K>> re-branding in select().
 function applyOp<T extends object>(
   rows: T[],
   op: Exclude<PipelineOp<T>, SortDescription>,
@@ -81,6 +93,16 @@ function applyOp<T extends object>(
           );
     case "limit":
       return rows.slice(0, op.count);
+    case "select":
+      return rows.map((row) => {
+        const projected: Record<string, unknown> = {};
+        for (const key of op.keys) {
+          if (Object.hasOwn(row, key)) {
+            projected[key] = (row as Record<string, unknown>)[key];
+          }
+        }
+        return projected as T;
+      });
   }
 }
 
@@ -199,6 +221,24 @@ export class Query<T extends object> {
       throw new TypeError(`limit(${String(n)}) requires a non-negative integer`);
     }
     return this.#extend({ kind: "limit", count: n });
+  }
+
+  // Projection (DESIGN section 7 select row): from this op on, every row is
+  // a NEW object carrying only the named keys, so this is the one fluent
+  // call that changes the row type — a selected-away key must not compile in
+  // any later call. The description records the keys verbatim (duplicates
+  // included: explain() reflects the call) and freezes them; a rest argument
+  // is a fresh array, so freezing in place is safe. K defaults to never so a
+  // zero-key select types as the empty projection it is at runtime — without
+  // the default, inference falls back to the CONSTRAINT and the type would
+  // claim every key survives. The cast is sound because ops interpret
+  // positionally: everything already recorded runs BEFORE this select and
+  // still sees the wider pre-projection rows, and the source array only ever
+  // feeds the pipeline's first step.
+  select<K extends keyof T & string = never>(...keys: K[]): Query<Pick<T, K>> {
+    return this.#extend({ kind: "select", keys: Object.freeze(keys) }) as unknown as Query<
+      Pick<T, K>
+    >;
   }
 
   // Runs the pipeline over the source, one step at a time, in call order

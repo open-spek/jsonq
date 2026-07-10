@@ -219,6 +219,43 @@ export function sortCallSites(q: Query<Product>): void {
   q.sort("price", "descending");
 }
 
+// -- select(...keys) API surface (task 3.7) --------------------------------------
+// select is the one fluent call that CHANGES the row type: the result is a
+// Query over Pick<T, K>, so a selected-away key drops out of every later
+// call's key union — where/sort/select on it must not compile.
+
+// Exported so no-unused-vars accepts a value binding used only in typeof.
+export declare const idNameQuery: ReturnType<typeof productQuery.select<"id" | "name">>;
+
+export type SelectApiCases = [
+  Expect<Equal<typeof idNameQuery, Query<Pick<Product, "id" | "name">>>>,
+  Expect<Equal<ReturnType<typeof idNameQuery.execute>, Pick<Product, "id" | "name">[]>>,
+];
+
+export function selectCallSites(q: Query<Product>): void {
+  // Positive call sites: survivors of a projection stay fully queryable.
+  q.select("id", "name");
+  q.select("id", "id"); // duplicate keys are harmless
+  q.select("id", "price").where("price", ">", 10).sort("price").select("id");
+  q.select("rating").sort("rating"); // nullable orderable keys stay sortable
+
+  // @ts-expect-error an unknown key is not selectable
+  q.select("missing");
+  // @ts-expect-error where on a selected-away key must not compile
+  q.select("id", "name").where("price", ">", 10);
+  // @ts-expect-error sort on a selected-away key must not compile
+  q.select("id").sort("name");
+  // @ts-expect-error a selected-away key cannot be selected again
+  q.select("id").select("name");
+}
+
+// Zero keys is the degenerate projection: K infers as never, so the result
+// rows carry no keys at all — matching the runtime, which projects every row
+// to an empty object (throwing is out: DESIGN section 7 locks the error set).
+export function selectZeroKeys(q: Query<Product>): Query<Pick<Product, never>> {
+  return q.select();
+}
+
 // -- Query<T> skeleton (DESIGN section 6: query() entry point, terminals) ------
 
 export type QuerySkeletonCases = [

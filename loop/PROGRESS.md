@@ -526,3 +526,55 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 187 tests pass (was 176; +11) at 100% line + function
   coverage, build OK. No new type tests: 3.6 adds no API surface (sort signature unchanged).
 - Next: task 3.7 (`select(...keys)` — projection).
+
+### 2026-07-10 — 3.7 select(...keys): projection (DONE)
+
+- Tests first: `src/query.test.ts` 16 new cases across two describe groups (projection incl.
+  new-object and field-reference-copy proofs, duplicate key, zero-key, absent-vs-explicitly-
+  undefined named keys, filter-before/after-select pipeline positions, predicate key
+  visibility after projection, mixed sort/limit pipeline, source snapshot, branching; explain
+  entries incl. verbatim duplicate keys, JSON round-trip, frozen keys array), `src/index.test.ts`
+  e2e gains a select call (rows gain a second field so projection is observable),
+  `src/type-tests.ts` gains 2 `Expect<Equal>` API positives (select -> `Query<Pick<T, K>>`,
+  execute -> `Pick<T, K>[]`), 4 positive call sites, 4 `@ts-expect-error` negatives, and a
+  zero-key inference pin; watched RED (`TS2339: Property 'select' does not exist on type
+  'Query<User>'`; bun: 17 fail) before implementing.
+- Built `select()` on Query plus the `{ kind: "select", keys }` member in
+  `OpDescription`/`PipelineOp` and a projection arm in the exhaustive applyOp switch. select
+  is the one fluent call that CHANGES the row type: it returns `Query<Pick<T, K>>` through a
+  single `as unknown` re-branding cast (Query is invariant in T — the stored predicate member
+  is contravariant), with the soundness argument in a code comment: ops interpret
+  positionally, so every op recorded before the select still runs against the wider
+  pre-projection rows. `src/ops.ts` unchanged (projection is pipeline interpretation, not
+  value semantics — 3.6 precedent).
+- DECISION — `K` carries the type-parameter default `= never`: the RED run for zero-key
+  `select()` showed TS falls back to the CONSTRAINT (`keyof T & string`) when rest-param
+  inference has no candidates, so without a default the type claims EVERY key survives while
+  the runtime projects to empty objects — a type-layer lie. With `= never` the degenerate
+  call types as `Query<Pick<T, never>>` (empty-object rows), matching the runtime exactly;
+  calls with arguments infer from them as before. Zero-key select stays LEGAL and yields
+  empty objects — rejecting it at runtime would break the DESIGN section 7 locked error set,
+  and narrowing the pinned `(...keys: K[])` signature to require one key would deviate from
+  DESIGN section 6. Flagged for human review.
+- DECISION — projection copies PRESENCE, not schema: a named key ABSENT from a row stays
+  absent from its projection (`Object.hasOwn` guard), while a key explicitly set to undefined
+  stays an own key. Reading of the DESIGN "exactly the named keys" pin: it bounds the MAXIMUM
+  key set (nothing else leaks through), it does not materialize missing keys. Rationale: 1.1
+  pinned `{a: undefined}` != `{}` as structurally distinct, so a projection that invents an
+  own key the row never had would erase a distinction the engine's own equality treats as
+  significant — and a materialized `key: undefined` is not even JSON-representable. Field
+  values copy BY REFERENCE (no deep copy — engine-wide stance, README duty noted at 3.2).
+  Flagged for human review (the DESIGN sentence can be read either way).
+- DECISION — description keys are recorded VERBATIM (duplicates included) and deep-frozen:
+  explain() reflects the calls actually made, so `select("id", "id")` shows
+  `keys: ["id", "id"]` while the projected object naturally carries the key once. The keys
+  array is engine-created (a rest argument is always a fresh array), so freezing it in place
+  costs nothing and keeps the plan tamper-proof — unlike caller-owned where values, which
+  stay shallow-frozen by reference (3.2).
+- Negative honesty probed, not assumed (0.1-3.5 precedent): the four new negatives re-run
+  without directives in a /tmp scratch — the unknown key fails TS2345 at the key argument,
+  and where/sort/select on a selected-away key each fail TS2345 with the narrowed key union
+  (`"name" | "id"`, `"id"`). Scratch left outside the repo.
+- Gate: typecheck OK, lint clean, 203 tests pass (was 187; +16) at 100% line + function
+  coverage, build OK.
+- Next: task 3.8 (ungrouped aggregates count/sum/avg/min/max on Query<T>).

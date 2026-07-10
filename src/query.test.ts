@@ -691,3 +691,136 @@ describe("explain() with chained sorts (task 3.6)", () => {
     ]);
   });
 });
+
+describe("select(...keys): projection (task 3.7)", () => {
+  test("projects each row to a NEW object with exactly the named keys", () => {
+    const users = makeUsers();
+    const result = query(users).select("id", "name").execute();
+    expect(result).toEqual([
+      { id: 1, name: "ada" },
+      { id: 2, name: "grace" },
+      { id: 3, name: "linus" },
+    ]);
+    expect(Object.keys(result[0] ?? {})).toEqual(["id", "name"]);
+    expect(result[0]).not.toBe(users[0]);
+  });
+
+  test("projected field values are the ORIGINAL references, not deep copies", () => {
+    const tags = ["kernel", "vcs"];
+    const users: User[] = [{ id: 3, name: "linus", tags }];
+    const result = query(users).select("tags").execute();
+    expect(result[0]?.tags).toBe(tags);
+  });
+
+  test("selecting the same key twice is harmless", () => {
+    const result = query(makeUsers()).select("id", "id").execute();
+    expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    expect(Object.keys(result[0] ?? {})).toEqual(["id"]);
+  });
+
+  test("a zero-key select projects every row to an empty object", () => {
+    expect(query(makeUsers()).select().execute()).toEqual([{}, {}, {}]);
+  });
+
+  test("a named key ABSENT from a row stays absent from its projection", () => {
+    // toEqual ignores undefined-valued keys, so Object.hasOwn is the real pin
+    const result = query(makeTracks()).select("id", "rating").execute();
+    expect(result[0]).toEqual({ id: 1, rating: 5 });
+    expect(Object.hasOwn(result[1] ?? {}, "rating")).toBe(false);
+    expect(result[2]).toEqual({ id: 3, rating: null });
+  });
+
+  test("a named key explicitly set to undefined stays an own key", () => {
+    const rows: { id: number; note?: string }[] = [{ id: 1, note: undefined }, { id: 2 }];
+    const result = query(rows).select("id", "note").execute();
+    expect(Object.hasOwn(result[0] ?? {}, "note")).toBe(true);
+    expect(Object.hasOwn(result[1] ?? {}, "note")).toBe(false);
+  });
+
+  test("where before select filters the FULL rows (the filter key may be selected away)", () => {
+    const result = query(makeTracks()).where("plays", ">", 9).select("title").execute();
+    expect(result).toEqual([{ title: "delta" }, { title: "echo" }, { title: "bravo" }]);
+  });
+
+  test("a keyed where after select filters the projected rows", () => {
+    const result = query(makeTracks()).select("id", "plays").where("plays", "==", 9).execute();
+    expect(result).toEqual([
+      { id: 2, plays: 9 },
+      { id: 5, plays: 9 },
+    ]);
+  });
+
+  test("a predicate after select sees only the projected keys", () => {
+    const seen: string[][] = [];
+    query(makeUsers())
+      .select("id")
+      .where((row) => {
+        seen.push(Object.keys(row));
+        return true;
+      })
+      .execute();
+    expect(seen).toEqual([["id"], ["id"], ["id"]]);
+  });
+
+  test("sort and limit compose with select in call order", () => {
+    const result = query(makeTracks()).select("id", "plays").sort("plays").limit(2).execute();
+    expect(result).toEqual([
+      { id: 2, plays: 9 },
+      { id: 5, plays: 9 },
+    ]);
+  });
+
+  test("projection never mutates the source array or its rows", () => {
+    const users = makeUsers();
+    const snapshot = structuredClone(users);
+    query(users).select("id", "name").execute();
+    expect(users).toEqual(snapshot);
+  });
+
+  test("branching: select extensions of a shared prefix stay independent", () => {
+    const prefix = query(makeUsers()).where("id", ">", 1);
+    const idsOnly = prefix.select("id");
+    const namesOnly = prefix.select("name");
+    expect(idsOnly.execute()).toEqual([{ id: 2 }, { id: 3 }]);
+    expect(namesOnly.execute()).toEqual([{ name: "grace" }, { name: "linus" }]);
+    expect(prefix.execute()).toEqual([
+      { id: 2, name: "grace", tags: [] },
+      { id: 3, name: "linus", tags: ["kernel", "vcs"] },
+    ]);
+    expect(prefix.explain()).toHaveLength(1);
+  });
+});
+
+describe("explain() with select ops (task 3.7)", () => {
+  test("a select call adds one { kind: 'select', keys } description", () => {
+    expect(query(makeUsers()).select("id", "name").explain()).toEqual([
+      { kind: "select", keys: ["id", "name"] },
+    ]);
+  });
+
+  test("keys are recorded verbatim: duplicates stay in the plan", () => {
+    expect(query(makeUsers()).select("id", "id").explain()).toEqual([
+      { kind: "select", keys: ["id", "id"] },
+    ]);
+  });
+
+  test("select descriptions survive a JSON round-trip in call order", () => {
+    const plan = query(makeUsers()).where("id", ">", 1).select("id", "name").limit(1).explain();
+    expect(JSON.parse(JSON.stringify(plan))).toEqual([
+      { kind: "where", key: "id", op: ">", value: 1 },
+      { kind: "select", keys: ["id", "name"] },
+      { kind: "limit", count: 1 },
+    ]);
+  });
+
+  test("the plan, the select description, and its keys array are all frozen", () => {
+    const plan = query(makeUsers()).select("id").explain();
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan[0])).toBe(true);
+    const description = plan[0] as { kind: "select"; keys: readonly string[] };
+    expect(Object.isFrozen(description.keys)).toBe(true);
+    expect(() => {
+      (description.keys as string[]).push("bogus");
+    }).toThrow(TypeError);
+  });
+});
