@@ -180,9 +180,10 @@ agg.sum<T>(key: KeysOfType<T, number>): ...;   // likewise avg / min / max
 
 ## 10. Open questions
 
-- [ ] npm publish + package name availability — owner: human. M1 closed out 2026-07-10 with
-      the full gate green, so the question is now ripe for the human decision. Not a loop
-      concern.
+- [x] npm publish + package name — RESOLVED 2026-07-10 by the maintainer: the package is
+      `@open-spek/jsonq` (the unscoped `jsonq` is taken on npm; the scope keeps the project
+      name intact and ties it to the open-spek organization, github.com/open-spek/jsonq).
+      `publishConfig.access: public` is set; publish timing remains the maintainer's call.
 
 ## 11. References
 

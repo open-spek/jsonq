@@ -1,7 +1,9 @@
 # jsonq
 
-> Status: M1 built. Source-only — npm publish is a human decision after M1
-> ([DESIGN section 10](./docs/DESIGN.md)), so today you consume it from `src/` or a local
+> npm: [`@open-spek/jsonq`](https://www.npmjs.com/package/@open-spek/jsonq) — GitHub: [open-spek/jsonq](https://github.com/open-spek/jsonq)
+
+> Status: M1 built; publishing as `@open-spek/jsonq` (name decided 2026-07-10, DESIGN
+> section 10). Until the first release lands on npm, consume it from `src/` or a local
 > `dist/` build.
 
 **jsonq is the query engine where an invalid query does not compile.**
@@ -17,7 +19,7 @@ values in the comments are measured output, not aspiration.
 ## Quick start
 
 ```ts
-import { agg, query } from "jsonq";
+import { agg, query } from "@open-spek/jsonq";
 
 type User = {
   id: number;
