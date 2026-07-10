@@ -100,7 +100,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       surface through (RangeError propagates); keys constrained to `KeysOfType<T, number>`.
       Type tests: non-number key passed to `sum`/`avg`/`min`/`max` must not compile.
       (DESIGN §6 ungrouped aggregates; §7 empty-set row)
-- [ ] 3.9 `groupBy(key)` -> `GroupedQuery<T, K>` and its `execute()`.
+- [x] 3.9 `groupBy(key)` -> `GroupedQuery<T, K>` and its `execute()`.
       Test first: `Map<T[K], T[]>` result; SameValueZero grouping via native Map; first-seen
       group order; rows keep pipeline order within a group; pipeline ops before groupBy apply
       first. Document (code comment + later README) the object-key-groups-by-reference

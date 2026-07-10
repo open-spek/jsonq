@@ -241,6 +241,16 @@ export class Query<T extends object> {
     >;
   }
 
+  // Grouping (DESIGN section 6): hands the pipeline to a GroupedQuery over
+  // this query — a stage change, not a recorded op, so the receiver keeps
+  // its plan and stays reusable, and no groupBy entry appears in explain()
+  // (the grouped stage has no explain of its own). ANY key is groupable:
+  // grouping is SameValueZero on the raw value, so no orderability
+  // constraint applies (see GroupedQuery for the key-equality fine print).
+  groupBy<K extends keyof T & string>(key: K): GroupedQuery<T, K> {
+    return new GroupedQuery(this, key);
+  }
+
   // Ungrouped aggregates (DESIGN section 6): terminal reads that run the
   // full pipeline and reduce the result in one step. No op is recorded, so
   // the receiver and its plan stay untouched and reusable. count counts
@@ -297,6 +307,44 @@ export class Query<T extends object> {
   // the plan is a frozen mapped copy, not the internal op list itself.
   explain(): readonly OpDescription[] {
     return Object.freeze(this.#ops.map((op) => describeOp(op)));
+  }
+}
+
+// The grouped stage (DESIGN section 6): a base query plus a grouping key,
+// created only by groupBy() — like Query, the constructor is module-internal
+// and src/index.ts exports the class TYPE-ONLY. execute() runs the base
+// pipeline first (every op before groupBy applies in call order), then
+// partitions the rows into a native Map, whose key equality is SameValueZero:
+// NaN key values form one group, +0/-0 collide, and — the documented
+// limitation of the DESIGN section 7 groupBy row — key values that are
+// objects group by REFERENCE, not by the deep structural equality that
+// where() uses. Groups appear in first-seen order (Map insertion order) and
+// rows keep pipeline order within a group. aggregate(spec) lands in 3.10.
+export class GroupedQuery<T extends object, K extends keyof T> {
+  readonly #base: Query<T>;
+  readonly #key: K;
+
+  constructor(base: Query<T>, key: K) {
+    this.#base = base;
+    this.#key = key;
+  }
+
+  // A fresh Map of fresh group arrays on every call; the arrays hold the
+  // ORIGINAL row references (no deep copy — DESIGN section 7 immutability
+  // row), so grouped execution mutates nothing and shares nothing between
+  // calls.
+  execute(): Map<T[K], T[]> {
+    const groups = new Map<T[K], T[]>();
+    for (const row of this.#base.execute()) {
+      const keyValue = row[this.#key];
+      const group = groups.get(keyValue);
+      if (group) {
+        group.push(row);
+      } else {
+        groups.set(keyValue, [row]);
+      }
+    }
+    return groups;
   }
 }
 

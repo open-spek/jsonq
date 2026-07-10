@@ -4,7 +4,7 @@
 // construction: a `@ts-expect-error` line that stops erroring is itself a
 // typecheck error ("unused directive"), so a loosened type layer fails here.
 
-import type { OpDescription, Query, query } from "./index";
+import type { GroupedQuery, OpDescription, Query, query } from "./index";
 import type { KeysOfType, OperatorFor, SortableKey, WhereValue } from "./types";
 
 // -- Test harness -------------------------------------------------------------
@@ -298,6 +298,66 @@ export function aggregateCallSites(q: Query<Product>): void {
   q.max("missing");
   // @ts-expect-error a selected-away numeric key is not aggregatable
   q.select("name").sum("price");
+}
+
+// -- groupBy(key) API surface (task 3.9) -----------------------------------------
+// groupBy is a stage change: the result is a GroupedQuery whose execute()
+// returns Map<T[K], T[]> (DESIGN section 6). ANY key is groupable — grouping
+// is SameValueZero on the raw value, so no orderability constraint applies —
+// and the key union narrows with projection like every other keyed call.
+
+export type GroupByApiCases = [
+  Expect<Equal<ReturnType<typeof productQuery.groupBy<"name">>, GroupedQuery<Product, "name">>>,
+  Expect<
+    Equal<
+      Parameters<Query<Product>["groupBy"]>,
+      [
+        key:
+          | "id"
+          | "name"
+          | "price"
+          | "sku"
+          | "active"
+          | "rating"
+          | "discount"
+          | "tags"
+          | "supplier"
+          | "deletedAt",
+      ]
+    >
+  >,
+  Expect<Equal<ReturnType<GroupedQuery<Product, "name">["execute"]>, Map<string, Product[]>>>,
+  Expect<
+    Equal<ReturnType<GroupedQuery<Product, "rating">["execute"]>, Map<number | null, Product[]>>
+  >,
+  Expect<
+    Equal<
+      ReturnType<GroupedQuery<Product, "supplier">["execute"]>,
+      Map<{ id: number } | null, Product[]>
+    >
+  >,
+  // grouped execution over a projection holds the PROJECTED row type
+  Expect<
+    Equal<
+      ReturnType<ReturnType<typeof idNameQuery.groupBy<"name">>["execute"]>,
+      Map<string, Pick<Product, "id" | "name">[]>
+    >
+  >,
+];
+
+export function groupByCallSites(q: Query<Product>): void {
+  // Positive call sites: every field category groups, projections included.
+  q.groupBy("name");
+  q.groupBy("active");
+  q.groupBy("supplier");
+  q.groupBy("rating");
+  q.where("price", ">", 10).groupBy("name");
+  q.select("id", "name").groupBy("name");
+
+  // @ts-expect-error an unknown key is not groupable
+  q.groupBy("missing");
+  // @ts-expect-error groupBy on a selected-away key must not compile
+  q.select("id").groupBy("name");
 }
 
 // -- Query<T> skeleton (DESIGN section 6: query() entry point, terminals) ------

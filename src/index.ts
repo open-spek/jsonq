@@ -3,4 +3,4 @@
 // with query() and extended only through the fluent methods. The agg
 // aggregate-spec namespace lands with grouped aggregates (task 3.10).
 export { query } from "./query";
-export type { OpDescription, Query } from "./query";
+export type { GroupedQuery, OpDescription, Query } from "./query";

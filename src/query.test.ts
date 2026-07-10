@@ -921,3 +921,125 @@ describe("empty-set aggregates through the pipeline (task 3.8, DESIGN section 7)
     expect(() => query(makeTracks()).limit(0).avg("plays")).toThrow(RangeError);
   });
 });
+
+describe("groupBy(key).execute(): Map grouping (task 3.9)", () => {
+  test("partitions pipeline rows into a Map keyed by the raw field value", () => {
+    const groups = query(makeTracks()).groupBy("plays").execute();
+    expect(groups).toBeInstanceOf(Map);
+    expect(groups.size).toBe(3);
+    expect(groups.get(100)?.map((track) => track.id)).toEqual([1, 4]);
+    expect(groups.get(9)?.map((track) => track.id)).toEqual([2, 5]);
+    expect(groups.get(20)?.map((track) => track.id)).toEqual([3]);
+  });
+
+  test("group keys appear in FIRST-SEEN order", () => {
+    const groups = query(makeTracks()).groupBy("plays").execute();
+    expect([...groups.keys()]).toEqual([100, 9, 20]);
+  });
+
+  test("rows keep pipeline order within a group and stay ORIGINAL references", () => {
+    const tracks = makeTracks();
+    const hundred = query(tracks).groupBy("plays").execute().get(100);
+    expect(hundred?.[0]).toBe(tracks[0]);
+    expect(hundred?.[1]).toBe(tracks[3]);
+  });
+
+  test("pipeline ops before groupBy apply first: a where filters the groups", () => {
+    const groups = query(makeTracks()).where("plays", ">", 9).groupBy("plays").execute();
+    expect([...groups.keys()]).toEqual([100, 20]);
+    expect(groups.get(100)?.map((track) => track.id)).toEqual([1, 4]);
+  });
+
+  test("first-seen order and within-group order both follow the PIPELINE order", () => {
+    // sorted desc by id, the pipeline runs 5,4,3,2,1 — so 9 is seen before
+    // 100, and within each group the higher id comes first
+    const groups = query(makeTracks()).sort("id", "desc").groupBy("plays").execute();
+    expect([...groups.keys()]).toEqual([9, 100, 20]);
+    expect(groups.get(9)?.map((track) => track.id)).toEqual([5, 2]);
+    expect(groups.get(100)?.map((track) => track.id)).toEqual([4, 1]);
+  });
+
+  test("groupBy composes after select: groups hold the projected rows", () => {
+    const groups = query(makeTracks()).select("title", "plays").groupBy("plays").execute();
+    expect(groups.get(9)).toEqual([
+      { title: "alpha", plays: 9 },
+      { title: "charlie", plays: 9 },
+    ]);
+  });
+
+  test("an empty pipeline result groups to an empty Map", () => {
+    expect(query(makeTracks()).limit(0).groupBy("plays").execute().size).toBe(0);
+    expect(query([] as Track[]).groupBy("plays").execute().size).toBe(0);
+  });
+
+  test("every execute() returns a fresh Map with fresh group arrays", () => {
+    const grouped = query(makeTracks()).groupBy("plays");
+    const first = grouped.execute();
+    expect(first).not.toBe(grouped.execute());
+    first.get(100)?.pop();
+    first.delete(9);
+    expect(grouped.execute().get(100)).toHaveLength(2);
+    expect(grouped.execute().size).toBe(3);
+  });
+
+  test("grouped execution never mutates the source array or its rows", () => {
+    const tracks = makeTracks();
+    const snapshot = structuredClone(tracks);
+    query(tracks).where("plays", ">", 9).groupBy("plays").execute();
+    expect(tracks).toEqual(snapshot);
+  });
+
+  test("groupBy is a stage change, not a recorded op: the receiver stays reusable", () => {
+    const q = query(makeTracks()).where("plays", ">", 9);
+    q.groupBy("plays");
+    expect(q.explain()).toEqual([{ kind: "where", key: "plays", op: ">", value: 9 }]);
+    expect(q.execute()).toHaveLength(3);
+  });
+
+  test("branching: two groupBys off one shared prefix are independent", () => {
+    const prefix = query(makeTracks()).where("plays", ">", 9);
+    const byPlays = prefix.groupBy("plays");
+    const byTitle = prefix.groupBy("title");
+    expect([...byPlays.execute().keys()]).toEqual([100, 20]);
+    expect([...byTitle.execute().keys()]).toEqual(["delta", "echo", "bravo"]);
+  });
+});
+
+describe("groupBy key equality is SameValueZero (task 3.9, DESIGN section 7)", () => {
+  test("NaN key values form ONE group", () => {
+    const rows = [
+      { id: 1, n: NaN },
+      { id: 2, n: NaN },
+    ];
+    const groups = query(rows).groupBy("n").execute();
+    expect(groups.size).toBe(1);
+    expect(groups.get(NaN)?.map((row) => row.id)).toEqual([1, 2]);
+  });
+
+  test("+0 and -0 collide into one group", () => {
+    const rows = [
+      { id: 1, n: 0 },
+      { id: 2, n: -0 },
+    ];
+    expect(query(rows).groupBy("n").execute().size).toBe(1);
+  });
+
+  test("null and undefined key values are DISTINCT groups", () => {
+    const groups = query(makeTracks()).groupBy("rating").execute();
+    expect(groups.size).toBe(5);
+    expect(groups.get(null)?.map((track) => track.id)).toEqual([3]);
+    expect(groups.get(undefined)?.map((track) => track.id)).toEqual([2]);
+  });
+
+  test("object key values group by REFERENCE, not structure (documented limitation)", () => {
+    const shared = { city: "berlin" };
+    const rows = [
+      { id: 1, address: shared },
+      { id: 2, address: shared },
+      { id: 3, address: { city: "berlin" } },
+    ];
+    const groups = query(rows).groupBy("address").execute();
+    expect(groups.size).toBe(2);
+    expect(groups.get(shared)?.map((row) => row.id)).toEqual([1, 2]);
+  });
+});

@@ -23,4 +23,7 @@ test("public surface: query() builds an executable query end to end", () => {
   ]);
   expect(query(rows).where("id", ">", 1).count()).toBe(2);
   expect(query(rows).sum("id")).toBe(6);
+  const groups = query(rows).where("id", ">", 1).groupBy("name").execute();
+  expect([...groups.keys()]).toEqual(["grace", "linus"]);
+  expect(groups.get("grace")).toEqual([{ id: 2, name: "grace" }]);
 });

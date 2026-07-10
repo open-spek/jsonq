@@ -620,3 +620,50 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 219 tests pass (was 203; +16) at 100% line + function
   coverage, build OK.
 - Next: task 3.9 (`groupBy(key)` -> `GroupedQuery<T, K>` and its execute()).
+
+### 2026-07-10 — 3.9 groupBy(key) -> GroupedQuery and its execute() (DONE)
+
+- Tests first: `src/query.test.ts` 15 new cases across two describe groups (Map grouping incl.
+  first-seen key order, within-group pipeline order with original-reference proof, where-first
+  and sort-first pipeline proofs, select composition, empty pipeline, fresh-Map-and-fresh-
+  group-arrays per call with mutation isolation, source snapshot, receiver-untouched, branching
+  two groupBys off one prefix; SameValueZero specifics — NaN one group, +0/-0 collide,
+  null vs undefined DISTINCT groups via the Track rating fixture, object keys group by
+  REFERENCE), `src/index.test.ts` e2e gains a groupBy through the public surface,
+  `src/type-tests.ts` gains 6 `Expect<Equal>` API positives (groupBy -> `GroupedQuery<T, K>`,
+  full groupable-key union, execute -> `Map<T[K], T[]>` for string/nullable/object keys,
+  projected row type preserved through grouping), 6 positive call sites, 2 `@ts-expect-error`
+  negatives; watched RED (`TS2339: Property 'groupBy' does not exist on type 'Query<Track>'`
+  at every call site; bun: 16 fail) before implementing.
+- Built `groupBy(key)` on Query and the `GroupedQuery<T, K extends keyof T>` class in
+  `src/query.ts` (module-internal constructor, exported TYPE-ONLY from index.ts like Query):
+  execute() runs the base pipeline via `Query.execute()`, then partitions rows into a native
+  `Map<T[K], T[]>` in one pass. `src/ops.ts` untouched — grouping is pipeline interpretation
+  plus native Map key semantics, no new value semantics (3.6/3.7 precedent). ~20 lines.
+- DECISION — groupBy is a STAGE CHANGE, not a recorded op: DESIGN section 6 gives
+  GroupedQuery only execute() and aggregate() (no explain), so a groupBy can never appear in
+  a plan the fluent chain extends past; the receiver Query keeps its op list untouched and
+  stays reusable (pinned by test: after `q.groupBy(...)`, q's explain() and execute() are
+  unchanged, and two groupBys branch independently off one prefix). GroupedQuery therefore
+  holds the base Query BY REFERENCE (safe: queries are immutable) instead of copying ops.
+  Rejected recording a `{ kind: "groupBy" }` op inside Query — execute() would need a
+  row-type-breaking arm for an op that can only ever be last.
+- DECISION — SameValueZero comes from the native Map, not from code: `groups.get/set` on the
+  raw `row[key]` value IS the DESIGN section 7 pin (NaN forms one group, +0/-0 collide),
+  so tests pin the semantics without any comparison code existing. Consequences pinned by
+  test: `null` and `undefined` keys are DISTINCT groups (deliberately unlike sort, where both
+  share the nulls-last rank — grouping distinguishes values, ordering ranks them); object key
+  values group by reference, with the documented-limitation code comment on GroupedQuery
+  (README duty stays with F.1).
+- DECISION — no key-type constraint on groupBy (`K extends keyof T & string`, any field):
+  DESIGN section 6 constrains sort (SortableKey) and aggregates (KeysOfType) but pointedly
+  not groupBy, and SameValueZero is total over all values, so boolean/object/array keys group
+  fine. The type layer still narrows the key union after select (pinned negative).
+- KNOWN LIMITATION (recorded): `row[this.#key]` types as `T[K]` directly (no boundary cast
+  needed — the first keyed read in the engine that stays fully typed), but for a projected
+  row a named key ABSENT from the row (3.7 presence semantics) reads as `undefined` and
+  groups under the `undefined` key even though `T[K]` may not include undefined. Consistent
+  with grouping the raw value; only bites optional-key projections.
+- Gate: typecheck OK, lint clean, 234 tests pass (was 219; +15) at 100% line + function
+  coverage, build OK.
+- Next: task 3.10 (`agg` namespace + `GroupedQuery.aggregate(spec)`).
