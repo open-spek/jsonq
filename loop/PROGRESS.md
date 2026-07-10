@@ -358,3 +358,41 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 117 tests pass (was 102; +15) at 100% line + function
   coverage, build OK.
 - Next: task 3.3 (`where(predicate)` overload — typed escape hatch).
+
+### 2026-07-10 — 3.3 where(predicate) overload: typed escape hatch (DONE)
+
+- Tests first: `src/query.test.ts` 12 new cases across two describe groups (predicate
+  filtering incl. original-reference, pipeline-position, arity-spy, no-match, source-snapshot
+  and branching proofs; predicate explain incl. marker shape, no-function-leak, mixed-plan
+  JSON round-trip, frozen plan), `src/index.test.ts` e2e extended with a predicate call,
+  `src/type-tests.ts` gains 2 `Expect<Equal>` API positives, 3 call-site positives, 3
+  `@ts-expect-error` negatives; watched RED (`TS2554: Expected 3 arguments, but got 1` at
+  every predicate call site; bun: 10 fail) before implementing.
+- Built the overload: `where(predicate)` declared after the keyed signature; the
+  implementation signature is a rest-tuple union narrowed by `args.length` (no casts, no
+  non-null assertions). The internal op list is now `PipelineOp<T>` — keyed ops are still
+  their own frozen descriptions, a predicate op carries the actual function.
+- DECISION — a predicate op appears in explain() as the frozen marker
+  `{ kind: "where", predicate: true }`, and explain() returns a frozen MAPPED COPY of the
+  internal op list (the mapped-copy possibility recorded at 3.1 is now fact): a function
+  value on a description would be silently dropped by JSON.stringify, making the plan lie
+  about its own length/shape. Rejected storing the function enumerably on the description
+  (round-trip loses the op) and a non-enumerable function property (hidden state on a
+  "plain" object). All predicate wheres share one module-level frozen marker. Explain()'s
+  array identity across calls was never pinned (3.1 limitation), so no existing test changed
+  meaning.
+- DECISION — the predicate is invoked with the ROW ALONE (an explicit arrow shields
+  Array.filter's index/array arguments): the public contract is `(row: T) => boolean`, and
+  leaking filter's extra parameters would let arguments-sniffing JS callers depend on row
+  position. Pinned by an arity-spy test.
+- DECISION — overload order is keyed first, predicate LAST (matches the DESIGN section 6
+  listing): the plain method type then resolves to the escape hatch under the
+  Parameters/ReturnType last-overload rule, which is what lets type-tests pin the exact
+  `(row: T) => boolean` shape without instantiation expressions.
+- Negative honesty probed, not assumed (0.1/2.1/3.2 precedent): re-ran the three new
+  negatives without directives — wrong return type fails TS2322 (string not boolean),
+  unknown property fails TS2339 on Product, foreign row type fails TS2345 contravariantly
+  at the argument. Directives restored, gate re-green.
+- Gate: typecheck OK, lint clean, 129 tests pass (was 117; +12) at 100% line + function
+  coverage, build OK.
+- Next: task 3.4 (`limit(n)` + pipeline call-order pin).

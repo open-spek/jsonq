@@ -139,6 +139,30 @@ export function whereCallSites(q: Query<Product>): void {
   q.where("name", "in", "a");
 }
 
+// -- where(predicate) overload (task 3.3) ---------------------------------------
+// The escape hatch is declared LAST in the overload list, so the plain method
+// type resolves to it under the Parameters/ReturnType last-overload rule —
+// pinning both that the overload exists and its exact (row: T) => boolean shape.
+
+export type WherePredicateApiCases = [
+  Expect<Equal<Parameters<Query<Product>["where"]>, [predicate: (row: Product) => boolean]>>,
+  Expect<Equal<ReturnType<Query<Product>["where"]>, Query<Product>>>,
+];
+
+export function wherePredicateCallSites(q: Query<Product>): void {
+  // Positive call sites: the row parameter is contextually typed as Product.
+  q.where((row) => row.price > 10 && row.active);
+  q.where((row) => row.tags.includes("sale"));
+  q.where((row: Product) => row.rating === null);
+
+  // @ts-expect-error the predicate must return boolean, not a string
+  q.where((row) => row.name);
+  // @ts-expect-error the row is typed — an unknown property must not compile
+  q.where((row) => row.missing === true);
+  // @ts-expect-error a predicate over a different row type must not compile
+  q.where((row: { other: string }) => row.other === "x");
+}
+
 // -- Query<T> skeleton (DESIGN section 6: query() entry point, terminals) ------
 
 export type QuerySkeletonCases = [

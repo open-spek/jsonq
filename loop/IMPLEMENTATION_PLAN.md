@@ -72,7 +72,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       gains a serializable `{ kind: "where", ... }` entry per call. Type tests: unknown key,
       `where("name", ">", 5)`, `where("active", ">", true)` all `@ts-expect-error`; `in` value
       typed `readonly T[K][]`. (DESIGN §6 where signature; ACCEPTANCE type-level negatives)
-- [ ] 3.3 `where(predicate)` overload — typed escape hatch `(row: T) => boolean`.
+- [x] 3.3 `where(predicate)` overload — typed escape hatch `(row: T) => boolean`.
       Test first: runtime filtering; overload resolution alongside 3.2 stays intact.
       DECISION to pin: how a predicate op is described in `explain()` while staying
       serializable (e.g. `{ kind: "where", predicate: true }`) — record it. (DESIGN §6)

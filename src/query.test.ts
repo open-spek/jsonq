@@ -196,6 +196,118 @@ describe("explain() with where ops (task 3.2)", () => {
   });
 });
 
+describe("where(predicate): typed escape hatch (task 3.3)", () => {
+  test("keeps exactly the rows for which the predicate returns true", () => {
+    const result = query(makeUsers())
+      .where((user) => user.id % 2 === 1)
+      .execute();
+    expect(result.map((user) => user.name)).toEqual(["ada", "linus"]);
+  });
+
+  test("matched rows are the ORIGINAL row references", () => {
+    const users = makeUsers();
+    const result = query(users)
+      .where((user) => user.id > 1)
+      .execute();
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(users[1]);
+    expect(result[1]).toBe(users[2]);
+  });
+
+  test("predicate and operator wheres chain in call order (overloads coexist)", () => {
+    const result = query(makeUsers())
+      .where("id", ">", 1)
+      .where((user) => user.name.startsWith("g"))
+      .execute();
+    expect(result).toEqual([{ id: 2, name: "grace", tags: [] }]);
+  });
+
+  test("the predicate sees only rows that survived earlier pipeline ops", () => {
+    const seen: string[] = [];
+    query(makeUsers())
+      .where("id", ">", 1)
+      .where((user) => {
+        seen.push(user.name);
+        return true;
+      })
+      .execute();
+    expect(seen).toEqual(["grace", "linus"]);
+  });
+
+  test("the predicate is called with the row alone (filter index/array stay internal)", () => {
+    const argCounts: number[] = [];
+    const spy = (...args: unknown[]): boolean => {
+      argCounts.push(args.length);
+      return true;
+    };
+    query(makeUsers()).where(spy).execute();
+    expect(argCounts).toEqual([1, 1, 1]);
+  });
+
+  test("a predicate with no matches yields an empty array", () => {
+    const result = query(makeUsers())
+      .where(() => false)
+      .execute();
+    expect(result).toEqual([]);
+  });
+
+  test("predicate filtering never mutates the source array or its rows", () => {
+    const users = makeUsers();
+    const snapshot = structuredClone(users);
+    query(users)
+      .where((user) => user.id >= 2)
+      .execute();
+    expect(users).toEqual(snapshot);
+  });
+
+  test("branching: predicate extensions of a shared prefix stay independent", () => {
+    const prefix = query(makeUsers()).where((user) => user.id > 1);
+    const graceOnly = prefix.where((user) => user.name === "grace");
+    const linusOnly = prefix.where("name", "==", "linus");
+    expect(graceOnly.execute().map((user) => user.name)).toEqual(["grace"]);
+    expect(linusOnly.execute().map((user) => user.name)).toEqual(["linus"]);
+    expect(prefix.execute().map((user) => user.name)).toEqual(["grace", "linus"]);
+  });
+});
+
+describe("explain() with a predicate where (task 3.3)", () => {
+  test("a predicate op is described as { kind: 'where', predicate: true }", () => {
+    const plan = query(makeUsers())
+      .where((user) => user.id > 1)
+      .explain();
+    expect(plan).toEqual([{ kind: "where", predicate: true }]);
+  });
+
+  test("the description never carries the function itself", () => {
+    const plan = query(makeUsers())
+      .where((user) => user.id > 1)
+      .explain();
+    const values = Object.values(plan[0] ?? {});
+    expect(values.some((value) => typeof value === "function")).toBe(false);
+  });
+
+  test("a mixed plan survives a JSON round-trip in call order", () => {
+    const plan = query(makeUsers())
+      .where("id", ">", 1)
+      .where((user) => user.name !== "grace")
+      .where("name", "in", ["ada", "linus"])
+      .explain();
+    expect(JSON.parse(JSON.stringify(plan))).toEqual([
+      { kind: "where", key: "id", op: ">", value: 1 },
+      { kind: "where", predicate: true },
+      { kind: "where", key: "name", op: "in", value: ["ada", "linus"] },
+    ]);
+  });
+
+  test("the plan and its predicate description are frozen", () => {
+    const plan = query(makeUsers())
+      .where((user) => user.id > 1)
+      .explain();
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan[0])).toBe(true);
+  });
+});
+
 describe("branching: extensions of a shared prefix are independent (deferred 3.1 proof)", () => {
   test("where() returns a new query and leaves the receiver untouched", () => {
     const base = query(makeUsers());
