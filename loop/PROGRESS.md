@@ -60,3 +60,22 @@ Rules (from the reference build's real notebook):
 - No code written; gate not run (nothing to gate — package.json is task 0.1).
 - Next: task 0.1 (toolchain scaffold, gate green) via the build loop
   (LOOP_PROMPT_FILE=loop/PROMPT.md).
+
+### 2026-07-10 — M1 plan re-validated (planning mode, verification-only) (DONE)
+
+- Re-derived state from files and git: still pure greenfield (2 commits, no package.json, no
+  src/); the M1 plan from the previous iteration (531dbd8) is untouched by any build work and
+  PROGRESS records no blockers, so there is nothing to split, remove, or re-order.
+- Validated the existing 18-task plan against ACCEPTANCE.md and DESIGN.md line by line: every
+  functional criterion maps to tasks 1.1-1.4 / 3.1-3.10; type-level positives and all six
+  negative @ts-expect-error cases map to 2.1 plus per-task type tests and the 4.1 sweep;
+  quality maps to 0.1 / 4.1 / F.2; documentation to F.1 / F.3; process and completion signal
+  to F.3. No task touches a DESIGN section 8 refusal; refusals are listed under "Later".
+- DECISION — plan left byte-identical rather than regenerated: nothing has executed against it
+  and its inputs (DESIGN, ACCEPTANCE) are unchanged, so a rewrite would be churn with no
+  information gain. This entry exists so the verification itself is on record.
+- Verified loop/config/loop.env is already in build mode (LOOP_PROMPT_FILE="loop/PROMPT.md")
+  and no .loop/COMPLETE marker exists; docs/TOOLCHAIN.md and .claude/agents/judge.md referenced
+  by the plan both exist.
+- No code written; gate not run (still nothing to gate — package.json is task 0.1).
+- Next: task 0.1 (toolchain scaffold, gate green) via the build loop.
