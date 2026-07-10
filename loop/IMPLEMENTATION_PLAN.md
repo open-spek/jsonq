@@ -113,7 +113,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
 
 ## Phase 4 — acceptance sweep
 
-- [ ] 4.1 Reconciliation sweep: walk EVERY ACCEPTANCE.md functional and type-level bullet and
+- [x] 4.1 Reconciliation sweep: walk EVERY ACCEPTANCE.md functional and type-level bullet and
       every DESIGN §7 pin against the actual test suite; add any missing test (positive
       type-level set and all six negative `@ts-expect-error` cases explicitly). Confirm no
       stub/placeholder code paths remain (Phase 0 placeholder fully replaced), `dependencies`

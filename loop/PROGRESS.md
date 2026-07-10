@@ -725,3 +725,48 @@ Rules (from the reference build's real notebook):
   coverage, build OK.
 - Next: task 4.1 (reconciliation sweep: every ACCEPTANCE bullet and DESIGN section 7 pin
   against the actual suite).
+
+### 2026-07-10 — 4.1 Reconciliation sweep: ACCEPTANCE and DESIGN section 7 vs the suite (DONE)
+
+- Verification-only iteration: walked every ACCEPTANCE.md functional and type-level bullet and
+  every DESIGN section 7 pin against the actual suite. Nothing testable changed and NO test was
+  added — every bullet already maps to at least one existing test, so adding more would be
+  redundancy, not coverage. Anchors (test file : describe/site), so a later iteration can
+  re-verify without re-deriving:
+  - Immutability/branching -> query.test.ts skeleton + snapshot groups (18-97, 437-459) plus a
+    per-op source-snapshot and branching test in every 3.x group.
+  - Operator semantics -> ops.test.ts (deepEqual/compareRelational/evaluateWhere sweeps) plus
+    the per-operator surface tests in query.test.ts 99-174; NaN-false and type-sensitivity
+    pinned at both layers.
+  - Predicate overload -> query.test.ts 199-309; exact (row: T) => boolean shape in
+    WherePredicateApiCases.
+  - Sort (stable, tie-breakers first-call primary, nulls last both directions) ->
+    query.test.ts 486-693 + compareForSort groups in ops.test.ts.
+  - limit (call-time TypeError, limit(0), pipeline position) -> query.test.ts 311-435.
+  - Call order + explain serializability -> the discriminating pairs (355, 543, 837) and the
+    JSON round-trip test in every explain group.
+  - select / groupBy / aggregate / ungrouped aggregates / empty-set RangeError ->
+    query.test.ts 695-1200 and 828-923; SameValueZero specifics 1008-1045.
+  - Type-level positives all Expect<Equal>-asserted (WhereApiCases, SelectApiCases,
+    GroupByApiCases, AggApiCases, AggregateApiCases, QuerySkeletonCases); ALL SIX ACCEPTANCE
+    negatives are explicit @ts-expect-error sites: unknown key (type-tests.ts 132), relational
+    on boolean/null/object (54-59 probes + 136 API), where("name", ">", 5) verbatim (134),
+    non-number aggregate keys (289-300), non-sortable sort keys (208-219), selected-away
+    where (244).
+- Mechanical criteria re-verified: `dependencies` is `{}`; no TODO/FIXME/stub/placeholder
+  markers anywhere in src/ (grep); the Phase 0 PACKAGE_NAME placeholder is fully replaced by
+  the real surface in index.ts; the coverage table lists EVERY runtime src file (index.ts,
+  ops.ts, query.ts at 100% funcs+lines — the 0.1 known limitation re-checked, no file escapes;
+  types.ts is runtime-erased, recorded at 2.1); dist/ ships exactly the four modules with
+  .d.ts, no type-tests and no test files.
+- MEASUREMENT + DECISION — size budget read as CODE lines, and it holds: runtime source is
+  396 non-blank non-comment lines (index 3, ops 122, query 243, types 28) against the DESIGN
+  section 3 "~400-600 source lines" budget; raw line count is 685 because 289 lines are the
+  comment documentation. Rationale: the budget's own gloss is "comprehension time is the real
+  metric; no code-golf", and stripping decision-record comments to satisfy a raw-line reading
+  would optimize the number by damaging the metric. Flagged for human review (the budget is
+  ambiguous between raw and code lines; raw exceeds the band).
+- Gate: typecheck OK, lint clean, 252 tests pass (unchanged — verification-only) at 100%
+  line + function coverage, build OK.
+- Next: task F.1 (README.md usage docs + docs/ARCHITECTURE.md tour; every example executed
+  before transcription).
