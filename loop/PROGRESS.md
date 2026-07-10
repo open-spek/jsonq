@@ -141,3 +141,32 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 28 tests pass (was 1; +27) at 100% line + function
   coverage (src/index.ts and src/ops.ts both in the coverage table), build OK.
 - Next: task 1.2 (relational comparison for `<`, `<=`, `>`, `>=` in src/ops.ts).
+
+### 2026-07-10 — 1.2 Relational comparison for `<`, `<=`, `>`, `>=` (DONE)
+
+- Tests first: `src/ops.test.ts`, 13 new cases across four describe groups (number
+  ordering incl. equal/±0/infinity boundaries; NaN always false; string code-unit
+  order; mixed number/string unordered); watched RED (`SyntaxError: Export named
+  'compareRelational' not found in module 'src/ops.ts'`) before implementing.
+- Built `compareRelational(a, op, b)` plus the `RelationalOperator` type in
+  `src/ops.ts` (guarded core): a typeof-mismatch guard returning false, then an
+  exhaustive switch delegating to the native JS operators. ~15 lines.
+- DECISION — string comparison is plain JS code-unit order (no locale): it is
+  deterministic and environment-independent with zero dependencies, whereas
+  `localeCompare` depends on the ICU data the runtime ships and would make query
+  results platform-dependent. Pinned by tests: `"Z" < "a"`, `"ä" > "z"`,
+  `"10" < "9"` are all true.
+- DECISION — mixed number/string operands are UNORDERED: all four operators return
+  false, the same convention as NaN. Raw JS would coerce (`5 < "10"` is true in JS),
+  which contradicts the engine's type-sensitive stance (`1` never equals `"1"`);
+  throwing was rejected because DESIGN section 7 locks the runtime-error set to the
+  limit TypeError and the empty-set RangeError. Mixed operands can only reach the
+  runtime through a `number | string` union field, since `OperatorFor`/`T[K]`
+  typing (task 2.1) blocks everything else. Flagged for human review.
+- NaN-comparisons-false required no code: native relational operators are already
+  IEEE-754 unordered on NaN; tests pin it for all four operators, NaN on either
+  side and both.
+- Gate: typecheck OK, lint clean, 41 tests pass (was 28; +13) at 100% line +
+  function coverage, build OK.
+- Next: task 1.3 (`evaluateWhere(rowValue, op, value)` — one entry point for all
+  7 operators).

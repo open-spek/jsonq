@@ -34,3 +34,32 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     leftKeys.every((key) => Object.hasOwn(right, key) && deepEqual(left[key], right[key]))
   );
 }
+
+export type RelationalOperator = "<" | "<=" | ">" | ">=";
+
+// The <, <=, >, >= operators, allowed on number | string fields only
+// (DESIGN section 6). Same-type operands follow plain JS relational
+// semantics: numeric order for numbers, where every comparison involving
+// NaN is false, and code-unit order for strings (no locale). Mixed
+// number/string operands are unordered and compare false under every
+// operator — the type layer only lets them through a number | string
+// union field, and coercing would betray the engine's type sensitivity.
+export function compareRelational(
+  a: number | string,
+  op: RelationalOperator,
+  b: number | string,
+): boolean {
+  if (typeof a !== typeof b) {
+    return false;
+  }
+  switch (op) {
+    case "<":
+      return a < b;
+    case "<=":
+      return a <= b;
+    case ">":
+      return a > b;
+    case ">=":
+      return a >= b;
+  }
+}

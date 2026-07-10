@@ -36,7 +36,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       element-wise and order-sensitive, mixed nesting, empty object/array cases.
       DECISION to pin in PROGRESS: NaN-equality stance (JSON has no NaN, but runtime numbers
       can be — pick a behavior and record why). (DESIGN §6 operator table, `==`/`!=` row)
-- [ ] 1.2 Relational comparison for `<`, `<=`, `>`, `>=` on `number | string`.
+- [x] 1.2 Relational comparison for `<`, `<=`, `>`, `>=` on `number | string`.
       Test first: JS relational semantics for numbers and strings; every comparison involving
       NaN is `false`; mixed-direction cases. DECISION to pin: string comparison is plain JS
       code-unit order (no locale) — record it. (DESIGN §6 operator table, relational row)
