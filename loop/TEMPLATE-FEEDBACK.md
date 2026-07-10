@@ -24,3 +24,14 @@
 - 2026-07-10 — friction — PROGRESS.md.template's starter log entry mixes placeholder classes
   in one line ("{{DATE}}" is human-fill but "{{MILESTONE_NAME}}" got machine-substituted),
   producing a half-filled sentence — starter entry should use human-fill placeholders only.
+- 2026-07-10 — friction — planning mode has no self-stop: with max iterations 2, iteration 2
+  re-ran planning on an already-fresh plan (honest "plan unchanged" commit, but a wasted
+  iteration) — document "run planning with max 1 iteration" in MILESTONE-PLAYBOOK, or give
+  planning mode its own completion marker.
+- 2026-07-10 — friction — a planning run always ends with loop.sh exit 1 ("max iterations
+  without completion marker"), which reads as failure to any wrapper/automation — planning
+  runs need a distinct success signal.
+- 2026-07-10 — works-well — the planning agent exceeded expectations: verified greenfield by
+  inventory, mapped every ACCEPTANCE criterion to a task, assigned DESIGN's semantic gaps to
+  specific build tasks as decisions-to-pin, and flipped LOOP_PROMPT_FILE back to build mode
+  per the planning prompt's footer instruction.
