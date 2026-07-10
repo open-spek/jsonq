@@ -770,3 +770,38 @@ Rules (from the reference build's real notebook):
   line + function coverage, build OK.
 - Next: task F.1 (README.md usage docs + docs/ARCHITECTURE.md tour; every example executed
   before transcription).
+
+### 2026-07-10 — F.1 README usage docs + ARCHITECTURE guided tour (DONE)
+
+- Measured first (the docs analogue of tests-first): every README example was written into a
+  /tmp scratch runner (14 sections covering where operator/predicate, sort tie-breakers and
+  nulls-last, limit call-order pair, select, groupBy execute, aggregate spec, all five
+  ungrouped aggregates, empty-set RangeError, limit TypeError, explain JSON, branching,
+  result-reference identity, groupBy object-key reference), EXECUTED with bun, and ALSO
+  typechecked with the repo tsc flags (strict, noUncheckedIndexedAccess, verbatimModuleSyntax)
+  before transcription. Comments in the README are the captured output verbatim (e.g.
+  avg("age") 32.2, tie-break order Alan(41) before Ada(36), groupBy size 2-not-1). Scratch
+  stayed outside the repo (3.5 precedent).
+- Rewrote README.md (spec-time stub -> full usage doc): quick start, the six ACCEPTANCE
+  non-compiling examples, operator table, every fluent call and terminal, the two runtime
+  errors, explain plan, and a dedicated no-deep-copy section (result rows are original
+  references; select copies field values by reference; where holds values by reference) plus
+  the groupBy reference-key limitation — the two doc duties recorded at 3.2/3.7/3.9.
+  Populated docs/ARCHITECTURE.md from the template stub: module map with trust levels,
+  life-of-a-query flow, the ops.ts extracted-values boundary convention, type-layer summary,
+  seven test-enforced invariants, suggested reading order, ASCII diagram.
+- DECISION — README examples import `from "jsonq"` (the package.json name) while the status
+  banner states plainly that the package is source-only until the human post-M1 publish
+  decision: showing the real consumer form beats a relative-path import that would go stale
+  the moment publishing lands, and the banner keeps it honest. Flagged for human review
+  (publish decision may also want the banner reworded).
+- DECISION — the six negative examples in the README mirror the ACCEPTANCE type-level bullet
+  list one-to-one and say so: the README's compile-error claim is thereby anchored to
+  gate-enforced @ts-expect-error tests instead of prose promises.
+- KNOWN LIMITATION (recorded): README outputs are transcribed, not machine-extracted — a
+  future semantic change can silently stale them; the scratch runner is not kept in the repo
+  (gate lint would scan it, and a committed runner would need its own maintenance). Accepted:
+  examples are re-runnable by hand from the README as written.
+- Gate: typecheck OK, lint clean, 252 tests pass (unchanged — docs-only) at 100% line +
+  function coverage, build OK.
+- Next: task F.2 (fresh-context judge pass over src/ for the readable-in-one-sitting bar).

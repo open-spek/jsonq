@@ -122,7 +122,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
 
 ## Phase F — close out
 
-- [ ] F.1 `README.md` usage docs + `docs/ARCHITECTURE.md` guided tour.
+- [x] F.1 `README.md` usage docs + `docs/ARCHITECTURE.md` guided tour.
       Every README example EXECUTED first (scratch file run with bun, then transcribed —
       measured, not aspirational); cover where/sort/limit/select/groupBy/aggregate/execute/
       explain; document the no-deep-copy result semantics and the groupBy reference-key
