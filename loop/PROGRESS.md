@@ -40,3 +40,23 @@ Rules (from the reference build's real notebook):
 - Template scaffold applied; gate.sh wired to `bun run typecheck/lint/test/build` (fails until
   loop Phase 0 creates package.json — correct backpressure).
 - No source code exists. Next: planning mode generates IMPLEMENTATION_PLAN.md for M1.
+
+### 2026-07-10 — M1 plan generated (planning mode) (DONE)
+- Verified state by inventory: single scaffold commit, no package.json, no src/ — pure
+  greenfield; plan written from DESIGN.md + ACCEPTANCE.md with nothing to mark done.
+- Rewrote loop/IMPLEMENTATION_PLAN.md: 18 tasks in 6 phases (0 toolchain gate; 1 guarded core
+  ops.ts; 2 type machinery; 3 fluent builder in 10 slices; 4 acceptance sweep; F close-out).
+  Every ACCEPTANCE criterion maps to at least one task; refusals (DESIGN section 8) listed
+  under "Later".
+- DECISION — build order is bottom-up (ops.ts before types.ts before query.ts): the guarded
+  core is pure functions with no dependencies (easiest to TDD in isolation, and it is where
+  wrong answers are born, so it gets the earliest and strictest test pressure); the builder
+  then composes already-proven parts. Rejected top-down (builder first with stub ops) because
+  stubs in the guarded core would ship placeholder semantics past the gate.
+- DECISION — semantic gaps in DESIGN are pinned by the BUILD loop, not resolved here: NaN
+  equality for deepEqual (1.1), predicate representation in explain() (3.3), tie-breaker
+  composition mechanics and non-adjacent sort behavior (3.6). Each task explicitly requires a
+  recorded PROGRESS decision; flagged for human review when they land.
+- No code written; gate not run (nothing to gate — package.json is task 0.1).
+- Next: task 0.1 (toolchain scaffold, gate green) via the build loop
+  (LOOP_PROMPT_FILE=loop/PROMPT.md).

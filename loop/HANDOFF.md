@@ -7,9 +7,9 @@
 ## TL;DR — where we are
 
 Spec is locked (2026-07-10): MANIFESTO.md and docs/DESIGN.md are ratified, toolchain decided
-(docs/TOOLCHAIN.md), M1 acceptance written (loop/ACCEPTANCE.md). NO CODE EXISTS YET — not even
-package.json; loop Phase 0 scaffolds the toolchain. Next: planning mode generates
-loop/IMPLEMENTATION_PLAN.md, then the build loop runs M1.
+(docs/TOOLCHAIN.md), M1 acceptance written (loop/ACCEPTANCE.md). Planning mode has generated
+the M1 plan (loop/IMPLEMENTATION_PLAN.md — 18 tasks, 6 phases). NO CODE EXISTS YET — not even
+package.json; plan task 0.1 scaffolds the toolchain. Next: run the build loop on M1.
 
 ## Locked context (do not re-litigate)
 
@@ -21,9 +21,9 @@ See `docs/DESIGN.md` and "Deliberately rejected" there.
 
 ## Immediate next step
 
-Planning mode: generate loop/IMPLEMENTATION_PLAN.md from docs/DESIGN.md + loop/ACCEPTANCE.md
-(greenfield — nothing is built). Then switch LOOP_PROMPT_FILE back to loop/PROMPT.md and run
-the build loop.
+Build mode: LOOP_PROMPT_FILE is set to loop/PROMPT.md in loop/config/loop.env. Run
+`./loop/scripts/loop.sh`; the loop works loop/IMPLEMENTATION_PLAN.md top-down starting at
+task 0.1 (toolchain scaffold, gate green).
 
 ## Pointers
 
