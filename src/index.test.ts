@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { query } from "./index";
+import { agg, query } from "./index";
 
 test("public surface: query() builds an executable query end to end", () => {
   const rows = [
@@ -26,4 +26,9 @@ test("public surface: query() builds an executable query end to end", () => {
   const groups = query(rows).where("id", ">", 1).groupBy("name").execute();
   expect([...groups.keys()]).toEqual(["grace", "linus"]);
   expect(groups.get("grace")).toEqual([{ id: 2, name: "grace" }]);
+  expect(query(rows).groupBy("name").aggregate({ n: agg.count(), maxId: agg.max("id") })).toEqual([
+    { key: "ada", n: 1, maxId: 1 },
+    { key: "grace", n: 1, maxId: 2 },
+    { key: "linus", n: 1, maxId: 3 },
+  ]);
 });

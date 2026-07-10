@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { query } from "./query";
+import { agg, query } from "./query";
 
 interface User {
   id: number;
@@ -1041,5 +1041,160 @@ describe("groupBy key equality is SameValueZero (task 3.9, DESIGN section 7)", (
     const groups = query(rows).groupBy("address").execute();
     expect(groups.size).toBe(2);
     expect(groups.get(shared)?.map((row) => row.id)).toEqual([1, 2]);
+  });
+});
+
+describe("agg spec constructors (task 3.10)", () => {
+  test("agg.count() builds the keyless count descriptor", () => {
+    expect(agg.count()).toEqual({ kind: "count" });
+  });
+
+  test("agg.sum/avg/min/max build kind + key descriptors carrying the key verbatim", () => {
+    expect(agg.sum("plays")).toEqual({ kind: "sum", key: "plays" });
+    expect(agg.avg("plays")).toEqual({ kind: "avg", key: "plays" });
+    expect(agg.min("id")).toEqual({ kind: "min", key: "id" });
+    expect(agg.max("id")).toEqual({ kind: "max", key: "id" });
+  });
+
+  test("descriptors and the agg namespace itself are frozen", () => {
+    expect(Object.isFrozen(agg)).toBe(true);
+    expect(Object.isFrozen(agg.count())).toBe(true);
+    expect(Object.isFrozen(agg.sum("plays"))).toBe(true);
+  });
+
+  test("descriptors are plain serializable data", () => {
+    expect(JSON.parse(JSON.stringify(agg.sum("plays")))).toEqual({ kind: "sum", key: "plays" });
+  });
+});
+
+describe("groupBy(key).aggregate(spec): grouped aggregates (task 3.10)", () => {
+  test("computes one row per group: the key plus one number per spec name", () => {
+    const rows = query(makeTracks()).groupBy("plays").aggregate({
+      n: agg.count(),
+      total: agg.sum("id"),
+      mean: agg.avg("id"),
+      low: agg.min("id"),
+      high: agg.max("id"),
+    });
+    expect(rows).toEqual([
+      { key: 100, n: 2, total: 5, mean: 2.5, low: 1, high: 4 },
+      { key: 9, n: 2, total: 7, mean: 3.5, low: 2, high: 5 },
+      { key: 20, n: 1, total: 3, mean: 3, low: 3, high: 3 },
+    ]);
+  });
+
+  test("result rows appear in FIRST-SEEN group order", () => {
+    const rows = query(makeTracks()).groupBy("plays").aggregate({ n: agg.count() });
+    expect(rows.map((row) => row.key)).toEqual([100, 9, 20]);
+  });
+
+  test("pipeline ops before groupBy shape the groups the spec reduces", () => {
+    // sorted desc by id, the pipeline runs 5,4,3,2,1; the filter then keeps
+    // ids 4,3,1 — so 100 is first seen at id 4 and 20 before a second 100
+    const rows = query(makeTracks())
+      .sort("id", "desc")
+      .where("plays", ">", 9)
+      .groupBy("plays")
+      .aggregate({ high: agg.max("id") });
+    expect(rows).toEqual([
+      { key: 100, high: 4 },
+      { key: 20, high: 3 },
+    ]);
+  });
+
+  test("an empty pipeline result aggregates to an empty array", () => {
+    expect(query(makeTracks()).limit(0).groupBy("plays").aggregate({ n: agg.count() })).toEqual(
+      [],
+    );
+    expect(query([] as Track[]).groupBy("plays").aggregate({ n: agg.count() })).toEqual([]);
+  });
+
+  test("an empty spec yields rows carrying only the group key", () => {
+    expect(query(makeTracks()).groupBy("plays").aggregate({})).toEqual([
+      { key: 100 },
+      { key: 9 },
+      { key: 20 },
+    ]);
+  });
+
+  test("null and undefined group keys aggregate as their own rows", () => {
+    const rows = query(makeTracks()).groupBy("rating").aggregate({ n: agg.count() });
+    expect(rows).toStrictEqual([
+      { key: 5, n: 1 },
+      { key: undefined, n: 1 },
+      { key: null, n: 1 },
+      { key: 1, n: 1 },
+      { key: 3, n: 1 },
+    ]);
+  });
+
+  test("NaN values in a group poison its numeric aggregates, never its count", () => {
+    const readings = [
+      { sensor: "a", value: 1 },
+      { sensor: "a", value: NaN },
+      { sensor: "b", value: 2 },
+    ];
+    const rows = query(readings).groupBy("sensor").aggregate({
+      n: agg.count(),
+      total: agg.sum("value"),
+      low: agg.min("value"),
+    });
+    expect(rows).toEqual([
+      { key: "a", n: 2, total: NaN, low: NaN },
+      { key: "b", n: 1, total: 2, low: 2 },
+    ]);
+  });
+
+  test("aggregate is a terminal read: fresh rows each call, receiver reusable", () => {
+    const grouped = query(makeTracks()).groupBy("plays");
+    const spec = { n: agg.count() };
+    const first = grouped.aggregate(spec);
+    const second = grouped.aggregate(spec);
+    expect(second).not.toBe(first);
+    expect(second).toEqual(first);
+    first.pop();
+    expect(grouped.aggregate(spec)).toHaveLength(3);
+    expect(grouped.execute().size).toBe(3);
+  });
+
+  test("the base query is untouched by grouping and aggregating", () => {
+    const q = query(makeTracks()).where("plays", ">", 9);
+    q.groupBy("plays").aggregate({ n: agg.count() });
+    expect(q.explain()).toEqual([{ kind: "where", key: "plays", op: ">", value: 9 }]);
+    expect(q.execute()).toHaveLength(3);
+  });
+
+  test("aggregating never mutates the source array or its rows", () => {
+    const tracks = makeTracks();
+    const snapshot = structuredClone(tracks);
+    query(tracks).groupBy("plays").aggregate({ total: agg.sum("id"), n: agg.count() });
+    expect(tracks).toEqual(snapshot);
+  });
+
+  test("one spec object serves many grouped queries; one descriptor, many names", () => {
+    const total = agg.sum("plays");
+    const spec = { a: total, b: total };
+    const byTitle = query(makeTracks()).groupBy("title").aggregate(spec);
+    expect(byTitle[0]).toEqual({ key: "delta", a: 100, b: 100 });
+    expect(query(makeTracks()).groupBy("id").aggregate(spec)).toHaveLength(5);
+  });
+
+  test("a spec name of `key` wins the key slot (spec names take precedence)", () => {
+    const rows = query(makeTracks()).groupBy("plays").aggregate({ key: agg.count() });
+    expect(rows).toEqual([{ key: 2 }, { key: 2 }, { key: 1 }]);
+  });
+
+  test("aggregate composes after select over the surviving keys", () => {
+    const rows = query(makeTracks())
+      .select("title", "plays")
+      .groupBy("title")
+      .aggregate({ totalPlays: agg.sum("plays") });
+    expect(rows[0]).toEqual({ key: "delta", totalPlays: 100 });
+    expect(rows).toHaveLength(5);
+  });
+
+  test("result rows are plain serializable objects", () => {
+    const rows = query(makeTracks()).groupBy("title").aggregate({ n: agg.count() });
+    expect(JSON.parse(JSON.stringify(rows))).toEqual(rows);
   });
 });

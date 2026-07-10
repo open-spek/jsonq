@@ -1,6 +1,7 @@
-// Public surface (DESIGN section 5): query() plus the public types. Query is
-// exported type-only so the constructor stays internal — queries are built
-// with query() and extended only through the fluent methods. The agg
-// aggregate-spec namespace lands with grouped aggregates (task 3.10).
-export { query } from "./query";
+// Public surface (DESIGN section 5): query(), the agg aggregate-spec
+// namespace, and the public types. Query and GroupedQuery are exported
+// type-only so their constructors stay internal — queries are built with
+// query() and extended only through the fluent methods.
+export { agg, query } from "./query";
 export type { GroupedQuery, OpDescription, Query } from "./query";
+export type { AggCount, AggNumeric, AggResult, AggRow, AggSpec, AggSpecEntry } from "./types";

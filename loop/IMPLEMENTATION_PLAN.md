@@ -105,7 +105,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       group order; rows keep pipeline order within a group; pipeline ops before groupBy apply
       first. Document (code comment + later README) the object-key-groups-by-reference
       limitation. Type tests: `groupBy().execute()` result type asserted. (DESIGN §7 groupBy row)
-- [ ] 3.10 `agg` namespace + `GroupedQuery.aggregate(spec)`.
+- [x] 3.10 `agg` namespace + `GroupedQuery.aggregate(spec)`.
       Test first: `agg.count/sum/avg/min/max` spec constructors; result rows
       `{ key } & { [name]: number }` with names AND types inferred from the spec; rows in
       first-seen group order. Type tests: inferred named-number result asserted with

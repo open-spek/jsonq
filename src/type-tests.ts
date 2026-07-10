@@ -4,7 +4,7 @@
 // construction: a `@ts-expect-error` line that stops erroring is itself a
 // typecheck error ("unused directive"), so a loosened type layer fails here.
 
-import type { GroupedQuery, OpDescription, Query, query } from "./index";
+import type { agg, GroupedQuery, OpDescription, Query, query } from "./index";
 import type { KeysOfType, OperatorFor, SortableKey, WhereValue } from "./types";
 
 // -- Test harness -------------------------------------------------------------
@@ -358,6 +358,89 @@ export function groupByCallSites(q: Query<Product>): void {
   q.groupBy("missing");
   // @ts-expect-error groupBy on a selected-away key must not compile
   q.select("id").groupBy("name");
+}
+
+// -- agg namespace + GroupedQuery.aggregate(spec) (task 3.10) ---------------------
+// The spec constructors accept any string key — a bare agg.sum("price") call
+// has no row type to check against, so key validity is enforced where the
+// spec meets one: the aggregate(spec) constraint. Result rows infer as ONE
+// flat named object type: the group key under `key` plus one number per
+// spec name.
+
+export declare const nameGrouped: GroupedQuery<Product, "name">;
+export declare const ratingGrouped: GroupedQuery<Product, "rating">;
+
+type ProductSalesSpec = {
+  total: ReturnType<typeof agg.count>;
+  revenue: ReturnType<typeof agg.sum<"price">>;
+  cheapest: ReturnType<typeof agg.min<"price">>;
+  mean: ReturnType<typeof agg.avg<"price">>;
+  top: ReturnType<typeof agg.max<"id">>;
+};
+
+export type AggApiCases = [
+  // constructor return shapes: kind and key inferred as literal types
+  Expect<Equal<ReturnType<typeof agg.count>, { readonly kind: "count" }>>,
+  Expect<
+    Equal<ReturnType<typeof agg.sum<"price">>, { readonly kind: "sum"; readonly key: "price" }>
+  >,
+  Expect<Equal<ReturnType<typeof agg.avg<"id">>, { readonly kind: "avg"; readonly key: "id" }>>,
+  // aggregate result: named numbers inferred from the spec, key from the group
+  Expect<
+    Equal<
+      ReturnType<typeof nameGrouped.aggregate<ProductSalesSpec>>,
+      {
+        key: string;
+        total: number;
+        revenue: number;
+        cheapest: number;
+        mean: number;
+        top: number;
+      }[]
+    >
+  >,
+  // the key column carries the group key's exact value type
+  Expect<
+    Equal<
+      ReturnType<typeof ratingGrouped.aggregate<{ n: ReturnType<typeof agg.count> }>>,
+      { key: number | null; n: number }[]
+    >
+  >,
+  // a spec name of `key` wins the key slot (recorded 3.10 decision)
+  Expect<
+    Equal<
+      ReturnType<typeof nameGrouped.aggregate<{ key: ReturnType<typeof agg.count> }>>,
+      { key: number }[]
+    >
+  >,
+];
+
+export function aggregateSpecCallSites(
+  g: GroupedQuery<Product, "name">,
+  a: typeof agg,
+  q: Query<Product>,
+): void {
+  // Positive call sites: every constructor, exact-number keys, the empty
+  // spec, and keys that survive a projection.
+  g.aggregate({});
+  g.aggregate({ total: a.count() });
+  g.aggregate({ sales: a.sum("price"), mean: a.avg("price"), low: a.min("id"), hi: a.max("id") });
+  q.select("id", "name").groupBy("name").aggregate({ ids: a.sum("id") });
+
+  // @ts-expect-error a string field is not a numeric aggregate key
+  g.aggregate({ names: a.sum("name") });
+  // @ts-expect-error a nullable number field is not a numeric aggregate key
+  g.aggregate({ r: a.avg("rating") });
+  // @ts-expect-error an optional number field is not a numeric aggregate key
+  g.aggregate({ d: a.min("discount") });
+  // @ts-expect-error an unknown key is not an aggregate key
+  g.aggregate({ m: a.max("missing") });
+  // @ts-expect-error a selected-away numeric key is not aggregatable
+  q.select("name").groupBy("name").aggregate({ total: a.sum("price") });
+  // @ts-expect-error count takes no key
+  g.aggregate({ n: a.count("id") });
+  // @ts-expect-error a raw number is not an aggregate spec entry
+  g.aggregate({ n: 5 });
 }
 
 // -- Query<T> skeleton (DESIGN section 6: query() entry point, terminals) ------

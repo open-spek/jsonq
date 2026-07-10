@@ -6,7 +6,17 @@
 
 import { compareForSort, computeAggregate, evaluateWhere } from "./ops";
 import type { AggregateKind, SortDirection, WhereOperator } from "./ops";
-import type { KeysOfType, OperatorFor, SortableKey, WhereValue } from "./types";
+import type {
+  AggCount,
+  AggNumeric,
+  AggRow,
+  AggSpec,
+  AggSpecEntry,
+  KeysOfType,
+  OperatorFor,
+  SortableKey,
+  WhereValue,
+} from "./types";
 
 // Serializable op descriptions returned by explain(), discriminated by
 // `kind` (DESIGN section 7 explain row). Keys are recorded as plain strings
@@ -319,7 +329,7 @@ export class Query<T extends object> {
 // limitation of the DESIGN section 7 groupBy row — key values that are
 // objects group by REFERENCE, not by the deep structural equality that
 // where() uses. Groups appear in first-seen order (Map insertion order) and
-// rows keep pipeline order within a group. aggregate(spec) lands in 3.10.
+// rows keep pipeline order within a group.
 export class GroupedQuery<T extends object, K extends keyof T> {
   readonly #base: Query<T>;
   readonly #key: K;
@@ -346,7 +356,61 @@ export class GroupedQuery<T extends object, K extends keyof T> {
     }
     return groups;
   }
+
+  // Grouped aggregates (DESIGN sections 6-7): one fresh caller-owned row per
+  // group, in first-seen group order — the group key under `key`, plus one
+  // number per spec name, computed by the guarded core over the group's
+  // rows. Groups hold at least one row by construction, so the empty-set
+  // RangeError of avg/min/max cannot fire here (only ungrouped aggregates
+  // reach it). A spec name of `key` overwrites the key column — the one
+  // collision the { key } & AggResult<S> contract cannot satisfy — and
+  // AggRow types exactly that. The spec container is read on every call;
+  // keyed field values cross the guarded-core boundary through the same
+  // stringly re-read as where() and the ungrouped aggregates.
+  aggregate<S extends AggSpec<T>>(spec: S): AggRow<T[K], S>[] {
+    const entries: readonly (readonly [string, AggSpecEntry<T>])[] = Object.entries(spec);
+    const rows: Record<string, unknown>[] = [];
+    for (const [keyValue, group] of this.execute()) {
+      const row: Record<string, unknown> = { key: keyValue };
+      for (const [name, entry] of entries) {
+        row[name] =
+          entry.kind === "count"
+            ? computeAggregate(group, "count")
+            : computeAggregate(
+                group.map((member) => (member as Record<string, unknown>)[entry.key]),
+                entry.kind,
+                entry.key,
+              );
+      }
+      rows.push(row);
+    }
+    // Sound by construction: every row was built with the key column plus
+    // exactly one number per spec entry — the shape AggRow describes.
+    return rows as AggRow<T[K], S>[];
+  }
 }
+
+// Aggregate-spec constructors (DESIGN section 6): agg.count() counts whole
+// rows, agg.sum/avg/min/max name the numeric key they reduce. A constructor
+// only records intent as frozen plain data — no row type exists here to
+// check the key against, so any string key is accepted and the AggSpec<T>
+// constraint on aggregate(spec) rejects invalid keys where T is known.
+const COUNT_SPEC: AggCount = Object.freeze({ kind: "count" });
+
+function numericSpec<Kind extends Exclude<AggregateKind, "count">, K extends string>(
+  kind: Kind,
+  key: K,
+): AggNumeric<Kind, K> {
+  return Object.freeze({ kind, key });
+}
+
+export const agg = Object.freeze({
+  count: (): AggCount => COUNT_SPEC,
+  sum: <K extends string>(key: K): AggNumeric<"sum", K> => numericSpec("sum", key),
+  avg: <K extends string>(key: K): AggNumeric<"avg", K> => numericSpec("avg", key),
+  min: <K extends string>(key: K): AggNumeric<"min", K> => numericSpec("min", key),
+  max: <K extends string>(key: K): AggNumeric<"max", K> => numericSpec("max", key),
+});
 
 // Entry point: wrap a source array in a query with no pending ops. The
 // engine only ever reads the source, so a readonly array is accepted.

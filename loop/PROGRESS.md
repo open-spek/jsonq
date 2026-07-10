@@ -667,3 +667,61 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 234 tests pass (was 219; +15) at 100% line + function
   coverage, build OK.
 - Next: task 3.10 (`agg` namespace + `GroupedQuery.aggregate(spec)`).
+
+### 2026-07-10 — 3.10 agg namespace + GroupedQuery.aggregate(spec) (DONE)
+
+- Tests first: `src/query.test.ts` 18 new cases across two describe groups (agg constructors —
+  descriptor shapes, frozen namespace/descriptors, JSON-serializable; grouped aggregate — full
+  five-kind spec with exact rows, first-seen row order incl. a sort-shaped variant, ops-before-
+  groupBy proof, empty pipeline -> [], empty spec -> key-only rows, null/undefined group-key
+  rows via toStrictEqual, NaN poisoning through a group, terminal-read/fresh-rows/receiver-
+  reusable, base-query-untouched, source snapshot, spec-object and descriptor reuse, `key`-named
+  spec collision, select composition, JSON round-trip of result rows), `src/index.test.ts` e2e
+  gains a groupBy().aggregate() through the public surface, `src/type-tests.ts` gains 6
+  `Expect<Equal>` positives (constructor return shapes; flat named-number result rows; exact
+  group-key value type; `key`-collision typing), 4 positive call sites, 7 `@ts-expect-error`
+  negatives; watched RED (`TS2305: Module '"./index"' has no exported member 'agg'`, `TS2339:
+  Property 'aggregate' does not exist on type 'GroupedQuery<...>'`; bun: 2 fail + 2 module-load
+  errors) before implementing.
+- Built the `agg` frozen namespace + `numericSpec` helper in `src/query.ts`,
+  `GroupedQuery.aggregate(spec)` iterating the grouped Map (first-seen order for free), and the
+  descriptor/spec/result type machinery in `src/types.ts` (`AggCount`, `AggNumeric`,
+  `AggSpecEntry<T>`, `AggSpec<T>`, `AggResult<S>`, `AggRow<KeyValue, S>`), all exported from
+  `src/index.ts`. `src/ops.ts` untouched — computeAggregate (1.4) already carries the semantics;
+  aggregate() extracts values per group at the same stringly boundary as where()/ungrouped
+  aggregates.
+- DECISION — spec keys are validated at the aggregate(spec) call site, NOT in the constructors:
+  the DESIGN section 6 sketch `agg.sum<T>(key: KeysOfType<T, number>)` cannot infer T from a
+  bare key argument (T appears only inside a mapped type), so taken literally every constructor
+  call would need an explicit type argument (`agg.sum<Product>("price")`) — unusable as the
+  primary form. Constructors are `<K extends string>(key: K)` capturing the key literal, and
+  the `S extends AggSpec<T>` constraint rejects invalid keys exactly where a row type exists;
+  the probe run shows the error still names the key and `KeysOfType<Product, number>`. The
+  constraint the sketch expresses is fully enforced, just at the spec-meets-rows site. Flagged
+  for human review (deviation from the DESIGN sketch's literal signature shape).
+- DECISION — result rows are typed by a flat mapped type `AggRow<T[K], S>`, not the literal
+  `{ key: T[K] } & AggResult<S>` intersection: the two are structurally identical for every
+  non-degenerate spec, but the identity-based `Equal` in type-tests distinguishes intersections
+  from flat shapes (so the ACCEPTANCE "inferred named numbers asserted with Expect<Equal>"
+  needs the flat form), and hovers read as one named object. AggResult<S> stays exported and
+  feeds AggRow, keeping the DESIGN names on the surface.
+- DECISION — a spec name of `key` WINS the key slot, in both type and runtime: the DESIGN
+  contract `{ key } & AggResult<S>` is degenerate for that one name (the intersection would be
+  `T[K] & number`, a type no runtime value can honestly satisfy). Rejected forbidding the name
+  via a `{ key?: never }` constraint intersection (it breaks index-signature assignability and
+  yields opaque errors); chose spec-wins because runtime insertion order (key written first,
+  spec columns after) then matches the AggRow conditional exactly — the type never lies. Pinned
+  by a runtime test and an Expect<Equal> (`{ key: number }[]`). Flagged for human review (a
+  caller shadowing `key` silently loses the group-key column — their explicit spec choice).
+- DECISION — descriptors and the agg namespace are frozen; agg.count() returns one shared
+  frozen constant (PREDICATE_DESCRIPTION precedent): descriptors are engine-created plain data
+  (3.7 keys-array precedent), so freezing costs nothing and keeps specs tamper-proof.
+- KNOWN LIMITATION (recorded): the spec CONTAINER is caller-owned and re-read on every
+  aggregate() call — swapping a descriptor on a mutable spec object between calls changes
+  results (the descriptors themselves are frozen). Consistent with where() holding values by
+  reference. Also: aggregate() re-runs the full pipeline per call (3.8 precedent, documented
+  O(n) stance).
+- Gate: typecheck OK, lint clean, 252 tests pass (was 234; +18) at 100% line + function
+  coverage, build OK.
+- Next: task 4.1 (reconciliation sweep: every ACCEPTANCE bullet and DESIGN section 7 pin
+  against the actual suite).
