@@ -292,3 +292,8 @@ bun install
 - Guided tour of the source: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
 - What this refuses to be: [`MANIFESTO.md`](./MANIFESTO.md)
 - How it was built (autonomous test-gated loop): [`loop/LOOP-ENGINEERING.md`](./loop/LOOP-ENGINEERING.md)
+
+
+## NPM Publish
+
+Login to npm as `@open-spek` and run `npm publish`.
