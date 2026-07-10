@@ -2,7 +2,7 @@
 
 > Written by the HUMAN observer while jsonq is built with the loop-engineering template.
 > The loop agent does not edit this file. Every friction, gap, or pleasant surprise in the
-> template goes here, then flows back into `~/projects/libredb/loop-engineering-template`.
+> template goes here, then flows back into `~/projects/open-spek/loop (github.com/open-spek/loop)`.
 
 ## Format
 
