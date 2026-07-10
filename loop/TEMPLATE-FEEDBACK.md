@@ -35,3 +35,13 @@
   inventory, mapped every ACCEPTANCE criterion to a task, assigned DESIGN's semantic gaps to
   specific build tasks as decisions-to-pin, and flipped LOOP_PROMPT_FILE back to build mode
   per the planning prompt's footer instruction.
+- 2026-07-10 — gap (HIGH) — account usage limit hit mid-iteration: the `claude -p` process
+  HUNG instead of exiting (74 minutes, zero file/log activity), so loop.sh's classify() never
+  ran — it only inspects output after the process exits. The usage_limit branch is therefore
+  unreachable for this failure shape. loop.sh needs a PER-ITERATION TIMEOUT (e.g. `timeout
+  $LOOP_ITERATION_TIMEOUT` around the agent invocation, classified as transient/usage on
+  expiry). Recovery was manual: kill processes, `git checkout` the half-done uncommitted work
+  (fresh-context discipline made this safe — nothing committed mid-task), restart the loop.
+- 2026-07-10 — friction — human's editor created `.vscode/` while the loop ran; the template's
+  .gitignore does not cover editor dirs, so a loop `git add -A` could sweep it into a task
+  commit — add `.vscode/` (and `.idea/`) to `.gitignore.template`.

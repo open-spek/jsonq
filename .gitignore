@@ -19,3 +19,6 @@ loop/config/loop.env
 
 # OS
 .DS_Store
+
+# Editor
+.vscode/
