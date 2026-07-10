@@ -11,9 +11,14 @@
 // semantics from DESIGN section 7: empty-set behaviors (count/sum -> 0,
 // avg/min/max throw a RangeError naming the aggregate and the key) and the
 // NaN-poisoning stance for non-number values (decisions recorded in
-// loop/PROGRESS.md, task 1.4).
+// loop/PROGRESS.md, task 1.4). compareForSort pins the sort-comparator
+// semantics from DESIGN section 7: a total preorder where orderable values
+// come first (desc is their exact reverse), present-but-unorderable values
+// (NaN, type-lying data) follow, and null/undefined always sort LAST
+// regardless of direction (decisions recorded in loop/PROGRESS.md, task 3.5).
 import { describe, expect, test } from "bun:test";
 import {
+  compareForSort,
   compareRelational,
   computeAggregate,
   deepEqual,
@@ -496,5 +501,99 @@ describe("computeAggregate: NaN and non-number values poison the result (pinned 
 
   test("count is immune: it counts values, it does not read them", () => {
     expect(computeAggregate([NaN, "2", null], "count")).toBe(3);
+  });
+});
+
+describe("compareForSort: orderable values follow relational order per direction", () => {
+  test("numbers compare numerically ascending", () => {
+    expect(compareForSort(1, 2, "asc")).toBeLessThan(0);
+    expect(compareForSort(2, 1, "asc")).toBeGreaterThan(0);
+    expect(compareForSort(9, 100, "asc")).toBeLessThan(0);
+  });
+
+  test("desc is the exact reverse of asc for orderable values", () => {
+    expect(compareForSort(1, 2, "desc")).toBeGreaterThan(0);
+    expect(compareForSort(2, 1, "desc")).toBeLessThan(0);
+    expect(compareForSort("a", "b", "desc")).toBeGreaterThan(0);
+  });
+
+  test("equal values compare 0 in both directions (stability hook)", () => {
+    expect(compareForSort(3, 3, "asc")).toBe(0);
+    expect(compareForSort(3, 3, "desc")).toBe(0);
+    expect(compareForSort("x", "x", "asc")).toBe(0);
+  });
+
+  test("+0 and -0 compare 0 (no relational order between them)", () => {
+    expect(compareForSort(0, -0, "asc")).toBe(0);
+    expect(compareForSort(-0, 0, "desc")).toBe(0);
+  });
+
+  test("strings compare by plain code-unit order, no locale", () => {
+    expect(compareForSort("Z", "a", "asc")).toBeLessThan(0);
+    expect(compareForSort("10", "9", "asc")).toBeLessThan(0);
+    expect(compareForSort("ä", "z", "asc")).toBeGreaterThan(0);
+  });
+});
+
+describe("compareForSort: mixed number/string operands bucket numbers first (pinned decision)", () => {
+  test("a number sorts before a string ascending", () => {
+    expect(compareForSort(100, "a", "asc")).toBeLessThan(0);
+    expect(compareForSort("a", 100, "asc")).toBeGreaterThan(0);
+  });
+
+  test("the bucket order flips with desc like any orderable comparison", () => {
+    expect(compareForSort(100, "a", "desc")).toBeGreaterThan(0);
+    expect(compareForSort("a", 100, "desc")).toBeLessThan(0);
+  });
+});
+
+describe("compareForSort: null/undefined sort LAST regardless of direction (DESIGN 7)", () => {
+  test("null goes after any orderable value in both directions", () => {
+    expect(compareForSort(1, null, "asc")).toBeLessThan(0);
+    expect(compareForSort(1, null, "desc")).toBeLessThan(0);
+    expect(compareForSort(null, "z", "asc")).toBeGreaterThan(0);
+    expect(compareForSort(null, "z", "desc")).toBeGreaterThan(0);
+  });
+
+  test("undefined goes after any orderable value in both directions", () => {
+    expect(compareForSort(1, undefined, "asc")).toBeLessThan(0);
+    expect(compareForSort(1, undefined, "desc")).toBeLessThan(0);
+    expect(compareForSort(undefined, "z", "asc")).toBeGreaterThan(0);
+    expect(compareForSort(undefined, "z", "desc")).toBeGreaterThan(0);
+  });
+
+  test("null and undefined tie with each other (stable pipeline order wins)", () => {
+    expect(compareForSort(null, undefined, "asc")).toBe(0);
+    expect(compareForSort(undefined, null, "desc")).toBe(0);
+    expect(compareForSort(null, null, "asc")).toBe(0);
+    expect(compareForSort(undefined, undefined, "desc")).toBe(0);
+  });
+});
+
+describe("compareForSort: present-but-unorderable values sort after orderables, before null/undefined (pinned decision)", () => {
+  test("NaN goes after every orderable value regardless of direction", () => {
+    expect(compareForSort(5, NaN, "asc")).toBeLessThan(0);
+    expect(compareForSort(5, NaN, "desc")).toBeLessThan(0);
+    expect(compareForSort(NaN, "a", "asc")).toBeGreaterThan(0);
+    expect(compareForSort(NaN, "a", "desc")).toBeGreaterThan(0);
+  });
+
+  test("NaN goes before null/undefined regardless of direction", () => {
+    expect(compareForSort(NaN, null, "asc")).toBeLessThan(0);
+    expect(compareForSort(NaN, null, "desc")).toBeLessThan(0);
+    expect(compareForSort(undefined, NaN, "asc")).toBeGreaterThan(0);
+    expect(compareForSort(undefined, NaN, "desc")).toBeGreaterThan(0);
+  });
+
+  test("NaN ties with NaN and with other unorderable values", () => {
+    expect(compareForSort(NaN, NaN, "asc")).toBe(0);
+    expect(compareForSort(NaN, true, "asc")).toBe(0);
+  });
+
+  test("type-lying values (boolean, object, array) rank as unorderable", () => {
+    expect(compareForSort(true, 1, "asc")).toBeGreaterThan(0);
+    expect(compareForSort({ a: 1 }, "z", "desc")).toBeGreaterThan(0);
+    expect(compareForSort([1], null, "asc")).toBeLessThan(0);
+    expect(compareForSort(true, false, "asc")).toBe(0);
   });
 });

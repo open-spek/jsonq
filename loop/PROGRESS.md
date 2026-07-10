@@ -431,3 +431,57 @@ Rules (from the reference build's real notebook):
 - Gate: typecheck OK, lint clean, 145 tests pass (was 129; +16) at 100% line + function
   coverage, build OK.
 - Next: task 3.5 (`sort(key, direction?)` — single-key ordering).
+
+### 2026-07-10 — 3.5 sort(key, direction?): stable single-key ordering (DONE)
+
+- Tests first: `src/ops.test.ts` 13 new compareForSort cases across four describe groups
+  (orderable order per direction incl. +0/-0 and code-unit strings; mixed number/string
+  bucketing; nulls-last both directions; unorderable rank for NaN and type-lying values),
+  `src/query.test.ts` 17 new cases across two describe groups (asc default, desc, stability,
+  numeric-not-lexicographic, nulls/undefined last both directions, original-reference and
+  source-snapshot proofs, sort-vs-limit call-order discriminating pair, branching; explain
+  entries incl. explicit default direction, JSON round-trip, frozen plan), `src/index.test.ts`
+  e2e gains a sort call, `src/type-tests.ts` gains 2 `Expect<Equal>` API positives, 4 positive
+  call sites, 6 `@ts-expect-error` negatives; watched RED (`TS2305: no exported member
+  'compareForSort'`, `TS2339: Property 'sort' does not exist on type 'Query<Track>'`; bun:
+  19 fail + 1 error) before implementing.
+- Built `compareForSort(a, b, direction)` + `SortDirection` in `src/ops.ts` (guarded core —
+  DESIGN section 5 names compare() there) and `sort(key: SortableKey<T>, direction = "asc")`
+  on Query with the `{ kind: "sort", key, direction }` description and a copy-then-sort
+  applyOp arm (`[...rows].sort(...)`; rows and source never mutated).
+- DECISION — sort order is a total preorder in three ranks that NEVER flip with direction:
+  (0) orderable values, (1) present-but-unorderable values (NaN and type-lying booleans/
+  objects/arrays), (2) null/undefined. DESIGN pins only nulls-last; NaN is reachable through
+  the typed API (NaN is a number), and a partial comparator (NaN comparisons false, as in
+  compareRelational) would hand Array.sort an intransitive comparator and produce
+  implementation-defined orders. Rank 1 sits BEFORE rank 2 so "null/undefined sort LAST" stays
+  literally true. Same-rank unorderables compare 0 — the stable sort keeps their pipeline
+  order. Rejected throwing on NaN (breaks the DESIGN section 7 locked error set) and grouping
+  NaN with nulls (a present number should not interleave with genuinely missing values).
+  Flagged for human review.
+- DECISION — mixed number/string values (reachable via a `number | string` union field,
+  which SortableKey allows) bucket numbers BEFORE strings, and the bucket flips with desc
+  like any orderable comparison: desc is the EXACT reverse of asc among orderable values,
+  computed by swapping operands rather than negating (negation turns 0 into -0, which
+  Object.is-based test matchers reject). compareRelational's "mixed operands are unordered"
+  convention cannot serve a comparator that must be total. Flagged for human review.
+- DECISION — the description records the RESOLVED direction (`direction: "asc"` even when
+  the argument was omitted): a serialized plan should not require knowledge of the API
+  default to be read back. Follows the 3.4 precedent that description shapes are API surface
+  (pinned by toEqual + JSON round-trip tests).
+- DECISION — stability is delegated to the native `Array.prototype.sort` (ES2019 requires it;
+  Bun/JSC complies) and PINNED by tests on duplicate keys in both directions, rather than
+  implementing a decorated (index-tagged) sort. A hand-rolled stability layer would duplicate
+  what the runtime guarantees, against the size budget.
+- Chained-sort behavior is NOT pinned this task: with independent per-op stable sorts, a
+  chained `.sort(a).sort(b)` currently makes the LAST call primary, which contradicts the
+  DESIGN "FIRST call is primary" pin — that composition is exactly task 3.6, so no test
+  locks the interim behavior in.
+- Negative honesty probed, not assumed (0.1/2.1/3.2/3.3/3.4 precedent): all six new
+  negatives re-run without directives in a scratch file — five key rejections fail TS2345 at
+  the key argument via SortableKey, the direction rejection fails TS2345 at the direction
+  argument (`"descending"` not assignable to `SortDirection | undefined`). Scratch was
+  outside the repo (/tmp) and truncated; `rm` is blocked by loop containment.
+- Gate: typecheck OK, lint clean, 176 tests pass (was 145; +31) at 100% line + function
+  coverage, build OK.
+- Next: task 3.6 (chained `.sort()` tie-breakers — FIRST call primary).

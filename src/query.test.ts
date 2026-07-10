@@ -457,3 +457,131 @@ describe("branching: extensions of a shared prefix are independent (deferred 3.1
     expect(linusOnly.explain()).toHaveLength(2);
   });
 });
+
+// Sort fixture (task 3.5): plays has duplicates (stability) and values whose
+// numeric and lexicographic orders differ (9 < 100 numerically, "100" < "9"
+// as strings); rating is optional AND nullable so both null and undefined
+// nulls-last cases are reachable through the typed API.
+interface Track {
+  id: number;
+  title: string;
+  plays: number;
+  rating?: number | null;
+}
+
+function makeTracks(): Track[] {
+  return [
+    { id: 1, title: "delta", plays: 100, rating: 5 },
+    { id: 2, title: "alpha", plays: 9 },
+    { id: 3, title: "echo", plays: 20, rating: null },
+    { id: 4, title: "bravo", plays: 100, rating: 1 },
+    { id: 5, title: "charlie", plays: 9, rating: 3 },
+  ];
+}
+
+function sortedIds(q: { execute(): Track[] }): number[] {
+  return q.execute().map((track) => track.id);
+}
+
+describe("sort(key, direction?): single-key ordering (task 3.5)", () => {
+  test("ascending is the default direction", () => {
+    expect(sortedIds(query(makeTracks()).sort("title"))).toEqual([2, 4, 5, 1, 3]);
+  });
+
+  test("explicit 'asc' matches the default", () => {
+    expect(query(makeTracks()).sort("title", "asc").execute()).toEqual(
+      query(makeTracks()).sort("title").execute(),
+    );
+  });
+
+  test("numbers sort numerically, not lexicographically", () => {
+    // lexicographic order would put "100" before "9"
+    expect(sortedIds(query(makeTracks()).sort("plays"))).toEqual([2, 5, 3, 1, 4]);
+  });
+
+  test("desc reverses the orderable values", () => {
+    expect(sortedIds(query(makeTracks()).sort("plays", "desc"))).toEqual([1, 4, 3, 2, 5]);
+  });
+
+  test("the sort is stable: equal keys keep pipeline order", () => {
+    // plays 9: id 2 before id 5 (source order); plays 100: id 1 before id 4
+    expect(sortedIds(query(makeTracks()).sort("plays"))).toEqual([2, 5, 3, 1, 4]);
+    expect(sortedIds(query(makeTracks()).sort("plays", "desc"))).toEqual([1, 4, 3, 2, 5]);
+  });
+
+  test("null and undefined values sort LAST ascending, in pipeline order", () => {
+    // ratings 1, 3, 5 first; then id 2 (undefined) before id 3 (null)
+    expect(sortedIds(query(makeTracks()).sort("rating"))).toEqual([4, 5, 1, 2, 3]);
+  });
+
+  test("null and undefined values sort LAST descending too", () => {
+    expect(sortedIds(query(makeTracks()).sort("rating", "desc"))).toEqual([1, 5, 4, 2, 3]);
+  });
+
+  test("sorted rows are the ORIGINAL row references", () => {
+    const tracks = makeTracks();
+    const result = query(tracks).sort("title").execute();
+    expect(result[0]).toBe(tracks[1]);
+    expect(result[4]).toBe(tracks[2]);
+  });
+
+  test("sorting never mutates the source array or its rows", () => {
+    const tracks = makeTracks();
+    const snapshot = structuredClone(tracks);
+    query(tracks).sort("plays", "desc").execute();
+    expect(tracks).toEqual(snapshot);
+  });
+
+  test("sorting an empty source yields an empty array", () => {
+    expect(query([] as Track[]).sort("title").execute()).toEqual([]);
+  });
+
+  test("sort applies at its pipeline position: sort-then-limit keeps the smallest", () => {
+    expect(sortedIds(query(makeTracks()).sort("plays").limit(2))).toEqual([2, 5]);
+  });
+
+  test("limit-then-sort truncates FIRST, orders second (call order)", () => {
+    // truncating to the first two rows leaves ids 1 and 2; sorting them by
+    // plays ascending gives [2, 1] — sorting first would have given [2, 5]
+    expect(sortedIds(query(makeTracks()).limit(2).sort("plays"))).toEqual([2, 1]);
+  });
+
+  test("branching: sort extensions of a shared prefix stay independent", () => {
+    const prefix = query(makeTracks()).where("plays", ">", 9);
+    const byTitle = prefix.sort("title");
+    const byPlaysDesc = prefix.sort("plays", "desc");
+    expect(sortedIds(byTitle)).toEqual([4, 1, 3]);
+    expect(sortedIds(byPlaysDesc)).toEqual([1, 4, 3]);
+    expect(sortedIds(prefix)).toEqual([1, 3, 4]);
+    expect(prefix.explain()).toHaveLength(1);
+  });
+});
+
+describe("explain() with sort ops (task 3.5)", () => {
+  test("a sort call adds one { kind: 'sort', key, direction } description", () => {
+    expect(query(makeTracks()).sort("plays", "desc").explain()).toEqual([
+      { kind: "sort", key: "plays", direction: "desc" },
+    ]);
+  });
+
+  test("the defaulted direction is recorded explicitly as 'asc'", () => {
+    expect(query(makeTracks()).sort("title").explain()).toEqual([
+      { kind: "sort", key: "title", direction: "asc" },
+    ]);
+  });
+
+  test("sort descriptions survive a JSON round-trip in call order", () => {
+    const plan = query(makeTracks()).where("plays", ">", 9).sort("title", "desc").limit(1).explain();
+    expect(JSON.parse(JSON.stringify(plan))).toEqual([
+      { kind: "where", key: "plays", op: ">", value: 9 },
+      { kind: "sort", key: "title", direction: "desc" },
+      { kind: "limit", count: 1 },
+    ]);
+  });
+
+  test("the plan and its sort description are frozen", () => {
+    const plan = query(makeTracks()).sort("title").explain();
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan[0])).toBe(true);
+  });
+});

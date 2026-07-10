@@ -4,9 +4,9 @@
 // interprets the list once, in call order. The fluent methods land one per
 // task (3.2-3.10), each adding its op kind to the unions below.
 
-import { evaluateWhere } from "./ops";
-import type { WhereOperator } from "./ops";
-import type { OperatorFor, WhereValue } from "./types";
+import { compareForSort, evaluateWhere } from "./ops";
+import type { SortDirection, WhereOperator } from "./ops";
+import type { OperatorFor, SortableKey, WhereValue } from "./types";
 
 // Serializable op descriptions returned by explain(), discriminated by
 // `kind` (DESIGN section 7 explain row). Keys are recorded as plain strings
@@ -26,12 +26,22 @@ type WherePredicateDescription = {
   readonly predicate: true;
 };
 
+type SortDescription = {
+  readonly kind: "sort";
+  readonly key: string;
+  readonly direction: SortDirection;
+};
+
 type LimitDescription = {
   readonly kind: "limit";
   readonly count: number;
 };
 
-export type OpDescription = WhereDescription | WherePredicateDescription | LimitDescription;
+export type OpDescription =
+  | WhereDescription
+  | WherePredicateDescription
+  | SortDescription
+  | LimitDescription;
 
 // The internal pipeline op: identical to its public description for data
 // ops, but a predicate where carries the actual function, which execute()
@@ -39,6 +49,7 @@ export type OpDescription = WhereDescription | WherePredicateDescription | Limit
 type PipelineOp<T> =
   | WhereDescription
   | { readonly kind: "where"; readonly predicate: (row: T) => boolean }
+  | SortDescription
   | LimitDescription;
 
 // The shared tail every fresh query starts from; typed never[] so one frozen
@@ -65,6 +76,14 @@ function applyOp<T extends object>(rows: T[], op: PipelineOp<T>): T[] {
         : rows.filter((row) =>
             evaluateWhere((row as Record<string, unknown>)[op.key], op.op, op.value),
           );
+    case "sort":
+      return [...rows].sort((a, b) =>
+        compareForSort(
+          (a as Record<string, unknown>)[op.key],
+          (b as Record<string, unknown>)[op.key],
+          op.direction,
+        ),
+      );
     case "limit":
       return rows.slice(0, op.count);
   }
@@ -118,6 +137,16 @@ export class Query<T extends object> {
     }
     const [key, op, value] = args;
     return this.#extend({ kind: "where", key, op, value });
+  }
+
+  // Stable single-key ordering at this pipeline position (DESIGN section 7
+  // sort row): only number | string keys are sortable, nullable ones
+  // included — null/undefined values sort LAST regardless of direction.
+  // The resolved direction is recorded explicitly, so a serialized plan
+  // never depends on knowing the default. Chained .sort() tie-breakers are
+  // task 3.6.
+  sort(key: SortableKey<T>, direction: SortDirection = "asc"): Query<T> {
+    return this.#extend({ kind: "sort", key, direction });
   }
 
   // Keeps the first n rows at this pipeline position (DESIGN section 7 limit

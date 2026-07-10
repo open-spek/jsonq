@@ -183,6 +183,42 @@ export function limitCallSites(q: Query<Product>): void {
   q.limit();
 }
 
+// -- sort(key, direction?) API surface (task 3.5) --------------------------------
+// The 2.1 SortableAllows probes check SortableKey in isolation; these check
+// that the sort METHOD is wired through it and that the direction parameter
+// is the optional "asc" | "desc" literal union from DESIGN section 6.
+
+export type SortApiCases = [
+  Expect<
+    Equal<
+      Parameters<Query<Product>["sort"]>,
+      [key: "id" | "name" | "price" | "sku" | "rating" | "discount", direction?: "asc" | "desc"]
+    >
+  >,
+  Expect<Equal<ReturnType<Query<Product>["sort"]>, Query<Product>>>,
+];
+
+export function sortCallSites(q: Query<Product>): void {
+  // Positive call sites: direction optional, nullable orderable keys sortable.
+  q.sort("price");
+  q.sort("name", "desc");
+  q.sort("rating");
+  q.sort("sku", "asc");
+
+  // @ts-expect-error a boolean field is not sortable
+  q.sort("active");
+  // @ts-expect-error an object field is not sortable
+  q.sort("supplier");
+  // @ts-expect-error an array field is not sortable
+  q.sort("tags", "desc");
+  // @ts-expect-error an always-null field is not sortable
+  q.sort("deletedAt");
+  // @ts-expect-error an unknown key is not sortable
+  q.sort("missing");
+  // @ts-expect-error direction is "asc" | "desc", not an arbitrary string
+  q.sort("price", "descending");
+}
+
 // -- Query<T> skeleton (DESIGN section 6: query() entry point, terminals) ------
 
 export type QuerySkeletonCases = [

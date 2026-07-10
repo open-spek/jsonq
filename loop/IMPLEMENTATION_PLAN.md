@@ -81,7 +81,7 @@ Pure functions, no builder yet. Strictest tests; every semantic decision recorde
       limit applies at its pipeline position — `limit(k).where(...)` truncates FIRST, filters
       second; `explain()` lists ops in exactly call order across mixed pipelines.
       (DESIGN §7 limit row + pipeline-order row + explain row)
-- [ ] 3.5 `sort(key, direction?)` — single-key ordering.
+- [x] 3.5 `sort(key, direction?)` — single-key ordering.
       Test first: asc default, desc; stable (equal keys keep pipeline order); `null`/`undefined`
       values sort LAST regardless of direction; explain entry. Type tests: non-sortable key
       (boolean/object field) must not compile (`SortableKey<T>`). (DESIGN §7 sort row)

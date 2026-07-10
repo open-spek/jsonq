@@ -94,6 +94,47 @@ export function evaluateWhere(rowValue: unknown, op: WhereOperator, value: unkno
   }
 }
 
+export type SortDirection = "asc" | "desc";
+
+// Ranks a value for sorting (DESIGN section 7 sort row): orderable values
+// first, present-but-unorderable values (NaN, and type-lying data such as
+// booleans or objects) second, null/undefined LAST. Rank order never flips
+// with direction — the nulls-last pin — and a partial comparator would hand
+// the engine implementation-defined orders, so every value gets a rank.
+function sortRank(value: unknown): 0 | 1 | 2 {
+  if (value === null || value === undefined) {
+    return 2;
+  }
+  if (typeof value === "string" || (typeof value === "number" && !Number.isNaN(value))) {
+    return 0;
+  }
+  return 1;
+}
+
+// Three-way sort comparator backing sort(key, direction). Same-rank
+// unorderable values compare 0, so the stable sort keeps their pipeline
+// order. Among orderable values desc is the EXACT reverse of asc, computed
+// by swapping the operands (negating the result would turn 0 into -0);
+// mixed number/string pairs — reachable through a number | string union
+// field — bucket numbers before strings, then native JS order per type
+// (numeric; code-unit for strings, matching compareRelational).
+export function compareForSort(a: unknown, b: unknown, direction: SortDirection): number {
+  const rankA = sortRank(a);
+  const rankB = sortRank(b);
+  if (rankA !== 0 || rankB !== 0) {
+    return rankA - rankB;
+  }
+  const first = (direction === "desc" ? b : a) as number | string;
+  const second = (direction === "desc" ? a : b) as number | string;
+  if (typeof first !== typeof second) {
+    return typeof first === "number" ? -1 : 1;
+  }
+  if (first < second) {
+    return -1;
+  }
+  return first > second ? 1 : 0;
+}
+
 export type AggregateKind = "count" | "sum" | "avg" | "min" | "max";
 
 // Aggregate semantics (DESIGN sections 6-7). The caller extracts the field
