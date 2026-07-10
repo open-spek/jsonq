@@ -55,6 +55,31 @@
   one-task-one-commit. Trees verified identical, so no loss — but history rewrite inside an
   autonomous loop is unacceptable risk (breaks remotes/observers). PROMPT needs a guardrail:
   "never rewrite committed history; repair a missed tick with a forward-only docs commit."
+  (Guardrail 999h added to jsonq and the template mid-run; no recurrence after.)
+
+## Milestone close (M1 done — summary entries)
+
+- 2026-07-10 — works-well — END-TO-END RESULT: M1 completed fully autonomously in 21 build
+  iterations across 4 runner launches (3 usage-limit interruptions, zero code lost). 252
+  runtime tests + 54 negative type locks at 100% line+function coverage; gate independently
+  re-run green by the human; runtime semantics and a must-not-compile case independently
+  smoke-tested. No hand-fixing of agent output at any point — all interventions were inputs
+  (prompt guardrail, runner timeout) or process recovery (kill hung agent, discard
+  uncommitted half-work).
+- 2026-07-10 — works-well — the milestone-specialized PROMPT step 2 (type-layer RED
+  discipline) visibly shaped behavior: the loop probe-verified its negative type tests
+  against a loosened type (vacuity check) without being told to, mirroring its gate
+  coverage probe.
+- 2026-07-10 — works-well — the fresh-context judge agent worked as designed on first
+  in-loop use (F.2): PASS WITH NOTES, one genuine prose-contradicts-code MEDIUM caught and
+  fixed, one LOW declined with recorded reasoning.
+- 2026-07-10 — works-well — the empty-plan/unmet-acceptance branch and gate-repair exception
+  added to PROMPT were never needed, but the sweep task (4.1) resolved the line-budget
+  tension exactly per the honesty contract: measured code-vs-comment lines, pinned an
+  interpretation, flagged for human review, changed no code.
+- 2026-07-10 — suggestion — LOOP_ITERATION_TIMEOUT default 1800s means a usage-limit hang
+  costs up to 30 min before auto-recovery; consider 900s default, or document tuning it
+  down for interactive dogfood runs.
 - 2026-07-10 — friction — human's editor created `.vscode/` while the loop ran; the template's
   .gitignore does not cover editor dirs, so a loop `git add -A` could sweep it into a task
   commit — add `.vscode/` (and `.idea/`) to `.gitignore.template`.
